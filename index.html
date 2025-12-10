@@ -262,8 +262,11 @@
 
     <div id="toast-container"></div>
 
-    <aside id="sidebar"
-        class="fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white transform -translate-x-full transition-transform duration-300 md:relative md:translate-x-0 flex flex-col shadow-xl">
+    <aside id="sidebar" style="width: 256px;"
+        class="fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transform -translate-x-full transition-transform duration-300 md:relative md:translate-x-0 flex flex-col shadow-xl">
+        <div id="sidebar-resizer"
+            class="hidden md:block absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-slate-600 active:bg-indigo-500 z-50">
+        </div>
         <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
             <h2 class="font-bold text-lg tracking-wide">ROOMs</h2>
             <button onclick="toggleSidebar()" class="md:hidden text-gray-400 hover:text-white">✕</button>
@@ -339,7 +342,7 @@
                 </div>
             </div>
 
-            <button onclick="downloadExcel()" title="Excel保存"
+            <button id="header-download-btn" onclick="downloadExcel()" title="Excel保存"
                 class="text-gray-500 hover:text-green-600 transition p-2 bg-gray-50 rounded-full">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-5 h-5">
@@ -470,8 +473,9 @@
                 <label id="file-upload-label" class="text-xs font-medium text-gray-600">ファイル</label>
                 <input type="file" id="room-file-input"
                     class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
-                <input type="url" id="room-image-url-input" placeholder="https://example.com/image.png"
-                    class="hidden mt-1 block w-full border rounded px-3 py-2 text-sm" />
+                <textarea id="room-image-url-input"
+                    placeholder="https://example.com/image1.png&#10;https://example.com/image2.png"
+                    class="hidden mt-1 block w-full border rounded px-3 py-2 text-sm h-24"></textarea>
                 <p id="file-upload-info" class="text-xs text-gray-500 mt-1"></p>
             </div>
 
@@ -684,6 +688,7 @@
 
         let currentMessageLimit = 20;
         let isLoadingHistory = false;
+        let hasReachedEnd = false; // Flag to stop infinite loading
 
         const getDisplayName = () => {
             if (isAdmin) return localStorage.getItem('chatAdminName') || "";
@@ -736,7 +741,7 @@
                 }
             }
 
-            if (ui.chatContainer.scrollTop === 0 && currentRoomId && !isLoadingHistory) {
+            if (ui.chatContainer.scrollTop === 0 && currentRoomId && !isLoadingHistory && !hasReachedEnd) {
                 if (ui.chatContainer.children.length > 5) {
                     loadMoreHistory();
                 }
@@ -745,15 +750,23 @@
 
         function loadMoreHistory() {
             isLoadingHistory = true;
-            ui.loadingSpinner.classList.remove('hidden');
+            let spinner = document.getElementById('loading-spinner');
+            if (spinner) spinner.classList.remove('hidden');
 
             const previousHeight = ui.chatContainer.scrollHeight;
             currentMessageLimit += 20;
 
             loadMessages(currentRoomId, () => {
+                spinner = document.getElementById('loading-spinner'); // Re-fetch to be safe
                 const newHeight = ui.chatContainer.scrollHeight;
-                ui.chatContainer.scrollTop = newHeight - previousHeight;
-                ui.loadingSpinner.classList.add('hidden');
+                if (newHeight <= previousHeight) {
+                    hasReachedEnd = true;
+                    if (spinner) spinner.classList.add('hidden');
+                    // Optional: show toast only if user manually scrolled up, but might be annoying
+                } else {
+                    ui.chatContainer.scrollTop = newHeight - previousHeight;
+                    if (spinner) spinner.classList.add('hidden');
+                }
                 isLoadingHistory = false;
             });
         }
@@ -1000,6 +1013,75 @@
             currentMessageLimit = 20;
         }
 
+        window.moveRoom = async (roomId, direction) => {
+            const roomIds = Object.keys(allRoomsData).sort((a, b) => {
+                const orderA = allRoomsData[a].order ?? 0;
+                const orderB = allRoomsData[b].order ?? 0;
+                if (orderA === orderB) {
+                    // Fallback to createdAt desc (same as original query)
+                    return allRoomsData[b].createdAt.toMillis() - allRoomsData[a].createdAt.toMillis();
+                }
+                return orderA - orderB;
+            });
+
+            const currentIndex = roomIds.indexOf(roomId);
+            if (currentIndex === -1) return;
+
+            const targetIndex = currentIndex + direction;
+            if (targetIndex < 0 || targetIndex >= roomIds.length) return;
+
+            const targetRoomId = roomIds[targetIndex];
+
+            // Assign initial orders if missing
+            const updates = {};
+            const batch = [];
+
+            // Helper to ensure all rooms have order
+            let currentOrderBase = 0;
+            roomIds.forEach((id, idx) => {
+                if (allRoomsData[id].order === undefined) {
+                    batch.push({ id, order: idx * 10 });
+                    allRoomsData[id].order = idx * 10; // Optimistic update
+                }
+            });
+
+            // Execute batch init if needed
+            if (batch.length > 0) {
+                await Promise.all(batch.map(item => updateDoc(doc(db, "rooms", item.id), { order: item.order })));
+            }
+
+            // Now swap
+            const currentRoomOrder = allRoomsData[roomId].order;
+            const targetRoomOrder = allRoomsData[targetRoomId].order;
+
+            // Simple swap does not work if they are same (due to fallback), but we initialized them above if missing.
+            // If they were already set, they might be same? No, logic above sets them if undefined.
+            // If they are equal, we need to separate them.
+
+            // Re-calc orders to be safe: just re-index everything
+            // This is safer but more writes. Given < 100 rooms, it is fine.
+            // Actually, let's just swap the indexes in the array and re-assign orders 10, 20, 30...
+
+            const newRoomIds = [...roomIds];
+            [newRoomIds[currentIndex], newRoomIds[targetIndex]] = [newRoomIds[targetIndex], newRoomIds[currentIndex]];
+
+            const writeBatch = [];
+            newRoomIds.forEach((id, idx) => {
+                const newOrder = idx * 10;
+                if (allRoomsData[id].order !== newOrder) {
+                    writeBatch.push(updateDoc(doc(db, "rooms", id), { order: newOrder }));
+                }
+            });
+
+            try {
+                await Promise.all(writeBatch);
+                // showToast("順序を更新しました", "success"); // Optional: too noisy
+            } catch (e) {
+                console.error(e);
+                showToast("順序更新エラー", "error");
+            }
+        };
+
         function updateAuthUI() {
             let name = getDisplayName();
             let displayText = escapeHtml(name) || (currentUser ? `ID: ${currentUser.uid.slice(0, 6)}...` : "ゲスト");
@@ -1028,10 +1110,36 @@
             }
         }
 
+        // Initialize Sidebar Resizer
+        const sidebar = document.getElementById('sidebar');
+        const resizer = document.getElementById('sidebar-resizer');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none'; // Prevent text selection
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            // Limit width between 200px and 50vw
+            const newWidth = Math.max(200, Math.min(e.clientX, window.innerWidth * 0.5));
+            sidebar.style.width = `${newWidth}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+
         function loadRoomList() {
             let q = collection(db, "rooms");
             if (!isAdmin) q = query(collection(db, "rooms"), where("isPublic", "==", true));
-            else q = query(collection(db, "rooms"), orderBy("createdAt", "desc"));
+            // else q = collection(db, "rooms"); // default
 
             unsubscribeRooms = onSnapshot(q, (snapshot) => {
                 ui.roomList.innerHTML = '';
@@ -1044,9 +1152,26 @@
                 let foundLastRoom = false;
                 const lastRoomId = localStorage.getItem('lastRoomId');
 
+                // Convert to array and sort client-side to avoid Index requirement
+                let rooms = [];
                 snapshot.forEach(docSnap => {
-                    const room = docSnap.data();
-                    const id = docSnap.id;
+                    rooms.push({ id: docSnap.id, ...docSnap.data() });
+                });
+
+                rooms.sort((a, b) => {
+                    const orderA = a.order ?? 0;
+                    const orderB = b.order ?? 0;
+                    if (orderA === orderB) {
+                        // createdAt desc
+                        const timeA = a.createdAt ? a.createdAt.toMillis() : 0;
+                        const timeB = b.createdAt ? b.createdAt.toMillis() : 0;
+                        return timeB - timeA;
+                    }
+                    return orderA - orderB;
+                });
+
+                rooms.forEach(room => {
+                    const id = room.id;
                     allRoomsData[id] = room;
                     const btn = document.createElement('button');
                     btn.dataset.roomId = id;
@@ -1088,6 +1213,20 @@
                             window.showConfirm(`「${room.name}」を削除しますか？`, () => deleteRoom(id));
                         };
 
+                        const moveUpIcon = document.createElement('span');
+                        moveUpIcon.className = "text-lg font-bold cursor-pointer opacity-50 hover:opacity-100 select-none px-1";
+                        moveUpIcon.innerText = "△";
+                        moveUpIcon.title = "上に移動";
+                        moveUpIcon.onclick = (e) => { e.stopPropagation(); moveRoom(id, -1); };
+
+                        const moveDownIcon = document.createElement('span');
+                        moveDownIcon.className = "text-lg font-bold cursor-pointer opacity-50 hover:opacity-100 select-none px-1";
+                        moveDownIcon.innerText = "▽";
+                        moveDownIcon.title = "下に移動";
+                        moveDownIcon.onclick = (e) => { e.stopPropagation(); moveRoom(id, 1); };
+
+                        actions.appendChild(moveUpIcon);
+                        actions.appendChild(moveDownIcon);
                         actions.appendChild(statusIcon);
                         actions.appendChild(deleteIcon);
                         btn.appendChild(actions);
@@ -1141,6 +1280,7 @@
             returnToMessageId = null;
             ui.returnBtn.classList.add('hidden');
             currentRoomId = roomId;
+            hasReachedEnd = false; // Reset history end flag
             localStorage.setItem('lastRoomId', roomId);
             updateAuthUI();
 
@@ -1152,17 +1292,45 @@
 
             ui.roomName.innerText = roomData.name;
             ui.chatContainer.innerHTML = '<div id="loading-spinner" class="spinner"></div>';
+            ui.loadingSpinner = document.getElementById('loading-spinner'); // Update stale reference
             updateSidebarStyles();
             if (window.innerWidth < 768) toggleSidebar();
             if (unsubscribeMessages) unsubscribeMessages();
 
+
+
             const chatFooter = document.querySelector('footer');
+            const downloadBtn = document.getElementById('header-download-btn');
+            if (downloadBtn) {
+                if (roomData.type === 'chat' || !roomData.type) downloadBtn.classList.remove('hidden');
+                else downloadBtn.classList.add('hidden');
+            }
 
             if (roomData.type === 'image') {
                 chatFooter.classList.add('hidden');
+                chatFooter.classList.add('hidden');
+
+                let imagesHtml = '';
+                const images = roomData.imageUrls || (roomData.imageUrl ? [roomData.imageUrl] : []);
+
+                if (images.length === 0) {
+                    imagesHtml = '<div class="text-gray-500">画像が設定されていません</div>';
+                } else if (images.length === 1) {
+                    imagesHtml = `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(roomData.name)}" class="max-w-full max-h-full object-contain rounded-lg shadow-lg">`;
+                } else {
+                    // Optimized for maximum size: simple grid, no card styling, natural height
+                    imagesHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 w-full h-full overflow-y-auto content-start">
+                        ${images.map(url => `
+                            <div class="flex items-center justify-center bg-black/20">
+                                <img src="${escapeHtml(url)}" class="w-full h-auto object-contain max-h-screen">
+                            </div>
+                        `).join('')}
+                    </div>`;
+                }
+
                 ui.chatContainer.innerHTML = `
-                    <div class="w-full h-full flex items-center justify-center p-4">
-                        <img src="${escapeHtml(roomData.imageUrl)}" alt="${escapeHtml(roomData.name)}" class="max-w-full max-h-full object-contain rounded-lg shadow-lg">
+                    <div class="w-full h-full bg-gray-900/5">
+                        ${imagesHtml}
                     </div>
                 `;
             } else if (roomData.type === 'survey') {
@@ -1437,7 +1605,40 @@
                         <button id="tab-btn-summary" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">集計結果</button>
                         <button id="tab-btn-graph" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">グラフ</button>
                     </nav>
+                    <button onclick="downloadSurveyCSV()" class="text-sm bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded flex items-center gap-1 shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        CSVダウンロード
+                    </button>
+                </div>
                 `;
+
+                // Global function for CSV download
+                window.downloadSurveyCSV = () => {
+                    try {
+                        const csvData = responses.map(r => {
+                            const row = {
+                                "回答日時": r.createdAt ? formatTime(r.createdAt) : "",
+                                "回答者": r.senderName || `ID:${r.uid.slice(0, 6)}`
+                            };
+                            questions.forEach(q => {
+                                const val = r.responses[q.id];
+                                row[q.text] = Array.isArray(val) ? val.join(', ') : (val || "");
+                            });
+                            return row;
+                        });
+
+                        const wb = XLSX.utils.book_new();
+                        const ws = XLSX.utils.json_to_sheet(csvData);
+                        XLSX.utils.book_append_sheet(wb, ws, "アンケート結果");
+                        XLSX.writeFile(wb, `survey_${roomData.name}_${new Date().toISOString().slice(0, 10)}.csv`);
+                        showToast("ダウンロードしました", "success");
+                    } catch (e) {
+                        console.error(e);
+                        showToast("ダウンロード失敗: " + e.message, "error");
+                    }
+                };
                 wrapper.appendChild(tabContainer);
 
                 // Tab content panes
@@ -1559,7 +1760,7 @@
             grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
 
             questions.forEach(q => {
-                if (q.type !== 'star' && q.type !== 'selection') {
+                if (q.type !== 'star' && q.type !== 'selection' && q.type !== 'multi_selection') {
                     return;
                 }
 
@@ -1577,7 +1778,18 @@
                         const avg = allScores.reduce((a, b) => a + b, 0) / allScores.length;
                         const avgEl = document.createElement('div');
                         avgEl.className = 'text-center py-4';
+
+                        // Create visual stars
+                        let starsHtml = '<div class="flex justify-center gap-1 mb-2 text-2xl text-gray-300">';
+                        for (let i = 1; i <= 5; i++) {
+                            // Simple full/empty logic based on rounding
+                            if (i <= Math.round(avg)) starsHtml += '<span class="text-amber-500">★</span>';
+                            else starsHtml += '<span>★</span>';
+                        }
+                        starsHtml += '</div>';
+
                         avgEl.innerHTML = `
+                            ${starsHtml}
                             <div class="text-5xl font-bold text-amber-500">${avg.toFixed(2)}</div>
                             <div class="text-sm text-gray-500 mt-1">平均 (${allScores.length}件の回答)</div>
                         `;
@@ -1643,10 +1855,64 @@
                     }
                     grid.appendChild(card);
                 }
+
+                if (q.type === 'multi_selection') {
+                    const answerCounts = {};
+                    q.options.forEach(opt => { answerCounts[opt] = 0; });
+
+                    let totalSelections = 0;
+                    responses.forEach(r => {
+                        const rawObj = r.responses[q.id];
+                        // rawObj could be an array of strings
+                        if (Array.isArray(rawObj)) {
+                            rawObj.forEach(val => {
+                                if (answerCounts.hasOwnProperty(val)) {
+                                    answerCounts[val]++;
+                                    totalSelections++;
+                                }
+                            });
+                        }
+                    });
+
+                    if (totalSelections > 0) {
+                        const canvasContainer = document.createElement('div');
+                        canvasContainer.className = 'relative h-64 w-full';
+                        const canvas = document.createElement('canvas');
+                        canvasContainer.appendChild(canvas);
+                        card.appendChild(canvasContainer);
+
+                        new Chart(canvas, {
+                            type: 'bar', // Using Bar chart for multi-selection counts
+                            data: {
+                                labels: Object.keys(answerCounts),
+                                datasets: [{
+                                    label: '回答数',
+                                    data: Object.values(answerCounts),
+                                    backgroundColor: '#8B5CF6',
+                                    borderRadius: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                indexAxis: 'y', // Horizontal bar chart
+                                scales: {
+                                    x: { beginAtZero: true, ticks: { stepSize: 1 } }
+                                },
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    } else {
+                        card.innerHTML += '<p class="text-sm text-gray-400">まだ回答がありません。</p>';
+                    }
+                    grid.appendChild(card);
+                }
             });
 
             if (grid.children.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">グラフで表示できる質問タイプ（星評価・単一選択）がありません。</div>';
+                container.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">グラフで表示できる質問タイプ（星評価・選択式）がありません。</div>';
             } else {
                 container.appendChild(grid);
             }
@@ -1665,11 +1931,25 @@
             if (unsubscribeMessages) unsubscribeMessages();
 
             unsubscribeMessages = onSnapshot(q, (snapshot) => {
-                const loading = document.getElementById('loading-msg');
-                if (loading) loading.remove();
+                const loadingMsg = document.getElementById('loading-msg');
+                if (loadingMsg) loadingMsg.remove(); // Remove legacy legacy spinner if any
+
+                // Hide the main spinner if it exists
+                const mainSpinner = document.getElementById('loading-spinner');
+                if (mainSpinner) mainSpinner.classList.add('hidden');
+
+                // If fewer messages than limit returned, we reached the end
+                if (snapshot.size < currentMessageLimit) {
+                    hasReachedEnd = true;
+                }
 
                 if (snapshot.empty && ui.chatContainer.children.length <= 1) {
                     if (ui.chatContainer.querySelectorAll('[id^="row-"]').length === 0) {
+                        // Re-show spinner? No, just empty message.
+                        // Actually if empty, we might have cleared the spinner above.
+                        // Ensure spinner is hidden, show empty msg.
+                        const spinner = document.getElementById('loading-spinner');
+                        if (spinner) spinner.classList.add('hidden');
                         ui.chatContainer.innerHTML = '<div id="loading-spinner" class="spinner hidden"></div><div id="empty-msg" class="text-center text-gray-400 mt-10 text-sm">まだメッセージはありません</div>';
                     }
                 } else {
@@ -1955,15 +2235,19 @@
                     roomData.isPublic = document.getElementById('new-room-public').checked;
                     roomData.canComment = document.getElementById('new-room-comment').checked;
                 } else if (type === 'image') {
-                    const imageUrl = document.getElementById('room-image-url-input').value;
-                    if (!imageUrl) throw new Error("画像URLが入力されていません。");
-                    try {
-                        // Validate URL format
-                        new URL(imageUrl);
-                    } catch (_) {
-                        throw new Error("無効なURL形式です。");
-                    }
-                    roomData.imageUrl = imageUrl;
+                    const imageUrlText = document.getElementById('room-image-url-input').value;
+                    if (!imageUrlText.trim()) throw new Error("画像URLが入力されていません。");
+
+                    const urls = imageUrlText.split(/\r?\n/).map(u => u.trim()).filter(u => u);
+                    if (urls.length === 0) throw new Error("画像URLが入力されていません。");
+
+                    // Validate URL format
+                    urls.forEach(url => {
+                        try { new URL(url); } catch (_) { throw new Error(`無効なURL形式です: ${url}`); }
+                    });
+
+                    roomData.imageUrls = urls;
+                    roomData.imageUrl = urls[0]; // Fallback for legacy
                     roomData.isPublic = true;
                 } else if (type === 'survey') {
                     if (!file) throw new Error("CSVファイルが選択されていません。");
@@ -2147,8 +2431,8 @@
                 if (selectedType === 'image') {
                     fileUploadSection.classList.remove('hidden');
                     chatOptions.classList.add('hidden');
-                    fileUploadLabel.innerText = 'ルームに表示する画像URL';
-                    fileUploadInfo.innerText = '外部サービスにアップロードした画像のURLを貼り付けてください。';
+                    fileUploadLabel.innerText = 'ルームに表示する画像URL (複数行可)';
+                    fileUploadInfo.innerText = '外部サービスにアップロードした画像のURLを貼り付けてください（改行で区切って複数入力可）。';
                     imageUrlInput.classList.remove('hidden'); // Show URL input
                     imageUrlInput.required = true;
                 } else if (selectedType === 'survey') {
