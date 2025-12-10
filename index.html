@@ -258,7 +258,7 @@
     </style>
 </head>
 
-<body class="bg-gray-100 h-[100dvh] flex overflow-hidden select-none">
+<body class="bg-gray-100 h-[100dvh] flex overflow-hidden">
 
     <div id="toast-container"></div>
 
@@ -339,8 +339,8 @@
                 </div>
             </div>
 
-            <button id="download-btn" onclick="handleDownload()" title="保存"
-                class="text-gray-500 hover:text-green-600 transition p-2 bg-gray-50 rounded-full hidden">
+            <button onclick="downloadExcel()" title="Excel保存"
+                class="text-gray-500 hover:text-green-600 transition p-2 bg-gray-50 rounded-full">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-5 h-5">
                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -470,9 +470,8 @@
                 <label id="file-upload-label" class="text-xs font-medium text-gray-600">ファイル</label>
                 <input type="file" id="room-file-input"
                     class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
-                <textarea id="room-image-url-input"
-                    placeholder="https://example.com/1.png&#10;https://example.com/2.png"
-                    class="hidden mt-1 block w-full border rounded px-3 py-2 text-sm" rows="3"></textarea>
+                <input type="url" id="room-image-url-input" placeholder="https://example.com/image.png"
+                    class="hidden mt-1 block w-full border rounded px-3 py-2 text-sm" />
                 <p id="file-upload-info" class="text-xs text-gray-500 mt-1"></p>
             </div>
 
@@ -555,11 +554,6 @@
         import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment, getDocs, where, deleteDoc, arrayUnion, arrayRemove, setDoc, getDoc, limitToLast, getCountFromServer } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
 
-        // ==========================================================================================
-        //  Infrastructure Layer
-        //  (Firebase Configuration & Initialization)
-        // ==========================================================================================
-
         const firebaseConfig = {
             apiKey: "AIzaSyCQ8OL6GhYT5vza6v4ckXKqtDgkaAFTMnQ",
             authDomain: "relationship-building.firebaseapp.com",
@@ -570,12 +564,8 @@
             measurementId: "G-JWSTMBH5HB"
         };
 
-        console.log("App Version: 8.0 - UI/UX & Fixes");
+        console.log("App Version: 8.0.1 - Rule Compliance Fix");
 
-        // ==========================================================================================
-        //  UI Layer
-        //  (Notifications & Global UI Helpers)
-        // ==========================================================================================
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -617,11 +607,7 @@
             return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
-        // ==========================================================================================
-        //  Domain Layer
-        //  (Logic & Formatting)
-        // ==========================================================================================
-        // 修正: 日付フォーマットロジックの改善（今日なら時刻のみ、以外は日付+時刻）
+        // 修正: 日付フォーマットロジックの改善
         function formatTime(timestamp) {
             const date = timestamp ? timestamp.toDate() : new Date();
             const now = new Date();
@@ -639,7 +625,7 @@
             }
         }
 
-        // 修正: URL正規表現の改善（末尾の記号を除外）
+        // 修正: URL正規表現の改善
         function createContentWithLinks(text) {
             const fragment = document.createDocumentFragment();
             // 末尾の記号(.,;!?など)をURLに含めない正規表現
@@ -678,12 +664,6 @@
         const db = getFirestore(app);
         const storage = getStorage(app);
 
-
-
-        // ==========================================================================================
-        //  Application Layer
-        //  (State Management)
-        // ==========================================================================================
         let currentUser = null;
         let isAdmin = false;
 
@@ -714,12 +694,6 @@
             else localStorage.setItem('chatGuestName', name);
         };
 
-
-
-        // ==========================================================================================
-        //  UI Layer
-        //  (DOM Elements & Event Bindings)
-        // ==========================================================================================
         const ui = {
             sidebar: document.getElementById('sidebar'),
             overlay: document.getElementById('overlay'),
@@ -738,8 +712,7 @@
             scrollBottomBtn: document.getElementById('scroll-bottom-btn'),
             unreadBadge: document.getElementById('unread-badge'),
             returnBtn: document.getElementById('return-btn'),
-            loadingSpinner: document.getElementById('loading-spinner'),
-            downloadBtn: document.getElementById('download-btn')
+            loadingSpinner: document.getElementById('loading-spinner')
         };
 
         const savedSetting = localStorage.getItem('sendOnEnter');
@@ -1027,12 +1000,6 @@
             currentMessageLimit = 20;
         }
 
-
-
-        // ==========================================================================================
-        //  UI Layer
-        //  (State Updates & Rendering)
-        // ==========================================================================================
         function updateAuthUI() {
             let name = getDisplayName();
             let displayText = escapeHtml(name) || (currentUser ? `ID: ${currentUser.uid.slice(0, 6)}...` : "ゲスト");
@@ -1063,15 +1030,10 @@
 
         function loadRoomList() {
             let q = collection(db, "rooms");
-            // TEMPORARY: Revert to createdAt sorting to ensure rooms appear.
-            // We will migrate data (add 'order' field) then switch back later or handle local sorting.
-            if (!isAdmin) q = query(collection(db, "rooms"), where("isPublic", "==", true), orderBy("createdAt", "desc"));
+            if (!isAdmin) q = query(collection(db, "rooms"), where("isPublic", "==", true));
             else q = query(collection(db, "rooms"), orderBy("createdAt", "desc"));
 
-            console.log("Loading room list...", { isAdmin });
-
             unsubscribeRooms = onSnapshot(q, (snapshot) => {
-                console.log("Room snapshot received. Size:", snapshot.size, "Empty:", snapshot.empty);
                 ui.roomList.innerHTML = '';
                 allRoomsData = {};
                 if (snapshot.empty) {
@@ -1082,116 +1044,13 @@
                 let foundLastRoom = false;
                 const lastRoomId = localStorage.getItem('lastRoomId');
 
-                // Convert to array for local sorting
-                let rooms = [];
-                snapshot.forEach(doc => {
-                    rooms.push({ id: doc.id, ...doc.data() });
-                });
-
-                // Setup for Batch Update (Migration)
-                const batch = writeBatch(db);
-                let needsCommit = false;
-
-                // Local Sort: Order (asc) -> CreatedAt (desc)
-                rooms.sort((a, b) => {
-                    let oa = a.order !== undefined ? a.order : 9999999999999;
-                    let ob = b.order !== undefined ? b.order : 9999999999999;
-                    if (oa !== ob) return oa - ob;
-                    // Firestore Timestamps need toDate() for comparison if they are objects,
-                    // but if they are already numbers (e.g., from serverTimestamp()), direct comparison works.
-                    // Assuming createdAt is a Firestore Timestamp object, convert to milliseconds.
-                    const aCreatedAt = a.createdAt && typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
-                    const bCreatedAt = b.createdAt && typeof b.createdAt.toDate === 'function' ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
-                    return bCreatedAt - aCreatedAt;
-                });
-
-                rooms.forEach((room, index) => {
-                    const id = room.id;
+                snapshot.forEach(docSnap => {
+                    const room = docSnap.data();
+                    const id = docSnap.id;
                     allRoomsData[id] = room;
-
-                    // MIGRATION: If order is missing, assign it.
-                    if (room.order === undefined && isAdmin) {
-                        try {
-                            // Assign index as default order
-                            const ref = doc(db, "rooms", id);
-                            batch.update(ref, { order: index });
-                            needsCommit = true;
-                        } catch (e) { console.error(e); }
-                    }
-
                     const btn = document.createElement('button');
                     btn.dataset.roomId = id;
                     btn.className = `w-full text-left p-3 rounded-lg mb-1 flex items-center justify-between transition-colors outline-none group`;
-
-                    // --- Drag & Drop ---
-                    if (isAdmin) {
-                        btn.draggable = true;
-                        btn.addEventListener('dragstart', (e) => {
-                            e.dataTransfer.setData('text/plain', id);
-                            e.dataTransfer.effectAllowed = 'move';
-                            btn.classList.add('opacity-50');
-                        });
-                        btn.addEventListener('dragend', () => {
-                            btn.classList.remove('opacity-50');
-                        });
-                        btn.addEventListener('dragover', (e) => {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'move';
-                            const rect = btn.getBoundingClientRect();
-                            const offset = e.clientY - rect.top;
-                            // Visual Indicator
-                            ui.roomList.querySelectorAll('.border-t-2').forEach(el => el.classList.remove('border-t-2', 'border-indigo-500'));
-                            if (offset < rect.height / 2) {
-                                btn.style.borderTop = '2px solid #6366f1';
-                                btn.style.borderBottom = '';
-                            } else {
-                                btn.style.borderBottom = '2px solid #6366f1';
-                                btn.style.borderTop = '';
-                            }
-                        });
-                        btn.addEventListener('dragleave', () => {
-                            btn.style.borderTop = '';
-                            btn.style.borderBottom = '';
-                        });
-                        btn.addEventListener('drop', async (e) => {
-                            e.preventDefault();
-                            btn.style.borderTop = '';
-                            btn.style.borderBottom = '';
-
-                            const draggedId = e.dataTransfer.getData('text/plain');
-                            if (draggedId === id) return;
-
-                            const draggedBtn = ui.roomList.querySelector(`button[data-room-id="${draggedId}"]`);
-                            if (!draggedBtn) return;
-
-                            const rect = btn.getBoundingClientRect();
-                            const offset = e.clientY - rect.top;
-
-                            if (offset < rect.height / 2) {
-                                ui.roomList.insertBefore(draggedBtn, btn);
-                            } else {
-                                ui.roomList.insertBefore(draggedBtn, btn.nextSibling);
-                            }
-
-                            // --- Reorder Logic: Update Firestore ---
-                            const newOrder = [];
-                            ui.roomList.querySelectorAll('button[data-room-id]').forEach(b => newOrder.push(b.dataset.roomId));
-
-                            try {
-                                const newBatch = writeBatch(db);
-                                newOrder.forEach((rid, index) => {
-                                    newBatch.update(doc(db, "rooms", rid), { order: index });
-                                });
-                                await newBatch.commit();
-                                showToast("並び順を更新しました", "success");
-                            } catch (err) {
-                                console.error("Reorder failed:", err);
-                                showToast("並び替えに失敗しました", "error");
-                            }
-                        });
-                    }
-
-
                     const nameSpan = document.createElement('span');
                     nameSpan.className = "font-medium truncate";
                     nameSpan.innerText = escapeHtml(room.name);
@@ -1237,17 +1096,11 @@
                     ui.roomList.appendChild(btn);
                     if (id === lastRoomId) foundLastRoom = true;
                 });
-
                 updateSidebarStyles();
                 if (currentRoomId && allRoomsData[currentRoomId]) updateInputState(allRoomsData[currentRoomId]);
 
                 if (!currentRoomId && foundLastRoom) {
                     switchRoom(lastRoomId);
-                }
-
-                if (needsCommit && isAdmin) {
-                    batch.commit().then(() => console.log("Migrated room order data"))
-                        .catch(e => console.error("Migration failed", e));
                 }
             });
         }
@@ -1305,36 +1158,13 @@
 
             const chatFooter = document.querySelector('footer');
 
-            // --- Download Button Visibility ---
-            if (roomData.type === 'survey_result' || !roomData.type || roomData.type === 'chat') {
-                ui.downloadBtn.classList.remove('hidden');
-            } else {
-                ui.downloadBtn.classList.add('hidden');
-            }
-
             if (roomData.type === 'image') {
                 chatFooter.classList.add('hidden');
-
-                const urls = roomData.imageUrls || (roomData.imageUrl ? [roomData.imageUrl] : []);
-
                 ui.chatContainer.innerHTML = `
-                     <div class="h-full overflow-y-auto w-full">
-                         <div class="flex flex-wrap justify-center gap-6 p-4 pb-10">
-                            ${urls.map(url => `
-                                 <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden group w-full max-w-sm">
-                                     <div class="relative">
-                                        <img src="${escapeHtml(url)}" 
-                                             class="w-full h-auto object-contain hover:scale-105 transition duration-300 cursor-zoom-in" 
-                                             onclick="window.open('${escapeHtml(url)}', '_blank')"
-                                             loading="lazy">
-                                     </div>
-                                 </div>
-                            `).join('')}
-                         </div>
-                         ${urls.length === 0 ? '<div class="text-center text-gray-500 mt-20">画像が設定されていません</div>' : ''}
-                     </div>
+                    <div class="w-full h-full flex items-center justify-center p-4">
+                        <img src="${escapeHtml(roomData.imageUrl)}" alt="${escapeHtml(roomData.name)}" class="max-w-full max-h-full object-contain rounded-lg shadow-lg">
+                    </div>
                 `;
-
             } else if (roomData.type === 'survey') {
                 chatFooter.classList.add('hidden');
                 renderSurvey(roomData);
@@ -1353,33 +1183,8 @@
             const container = ui.chatContainer;
             container.innerHTML = '';
 
-            // --- Draft Logic: Load ---
-            const storageKey = `survey_draft_${currentRoomId}`;
-            let savedData = {};
-            try {
-                const saved = localStorage.getItem(storageKey);
-                if (saved) savedData = JSON.parse(saved);
-            } catch (e) {
-                console.error("Failed to load draft:", e);
-            }
-
             const form = document.createElement('form');
             form.className = 'p-8 space-y-8 max-w-2xl mx-auto bg-white rounded-lg shadow';
-
-            // --- Draft Logic: Save on Input ---
-            form.addEventListener('input', () => {
-                const fd = new FormData(form);
-                const draft = {};
-                for (const q of roomData.questions) {
-                    if (q.type === 'multi_selection') {
-                        draft[q.id] = fd.getAll(q.id);
-                    } else {
-                        draft[q.id] = fd.get(q.id);
-                    }
-                }
-                localStorage.setItem(storageKey, JSON.stringify(draft));
-            });
-
             form.onsubmit = async (e) => {
                 e.preventDefault();
                 const formData = new FormData(form);
@@ -1436,10 +1241,6 @@
                         };
                         await addDoc(collection(db, "survey_responses"), responseData);
                         showToast("回答を送信しました！", "success");
-
-                        // --- Draft Logic: Clear ---
-                        localStorage.removeItem(storageKey);
-
                         container.innerHTML = `
                             <div class="text-center p-10">
                                 <h2 class="text-2xl font-bold text-green-600 mb-4">ご協力ありがとうございました！</h2>
@@ -1475,7 +1276,6 @@
                             input.name = q.id;
                             input.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base py-2.5 px-3';
                             input.required = q.required;
-                            if (savedData[q.id]) input.value = savedData[q.id];
                             inputContainer.appendChild(input);
                             break;
                         }
@@ -1485,7 +1285,6 @@
                             textarea.rows = 4;
                             textarea.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base px-3 py-2';
                             textarea.required = q.required;
-                            if (savedData[q.id]) textarea.value = savedData[q.id];
                             inputContainer.appendChild(textarea);
                             break;
                         }
@@ -1500,8 +1299,6 @@
                                 radio.value = opt;
                                 radio.required = q.required;
                                 radio.className = 'h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300';
-                                if (savedData[q.id] === opt) radio.checked = true;
-
                                 const span = document.createElement('span');
                                 span.textContent = opt;
                                 span.className = 'text-gray-700';
@@ -1520,8 +1317,6 @@
                                 checkbox.name = q.id;
                                 checkbox.value = opt;
                                 checkbox.className = 'h-4 w-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300';
-                                if (savedData[q.id] && savedData[q.id].includes(opt)) checkbox.checked = true;
-
                                 const span = document.createElement('span');
                                 span.textContent = opt;
                                 span.className = 'text-gray-700';
@@ -1538,7 +1333,6 @@
                             hiddenInput.type = 'hidden';
                             hiddenInput.name = q.id;
                             hiddenInput.required = q.required;
-                            if (savedData[q.id]) hiddenInput.value = savedData[q.id];
                             inputContainer.appendChild(hiddenInput);
 
                             for (let i = 1; i <= 5; i++) {
@@ -1546,9 +1340,6 @@
                                 star.innerHTML = '&#9734;'; // empty star
                                 star.className = 'text-4xl text-gray-300 cursor-pointer transition-colors hover:text-yellow-400 select-none';
                                 star.dataset.value = i;
-                                if (hiddenInput.value && i <= parseInt(hiddenInput.value)) {
-                                    star.style.color = '#f59e0b';
-                                }
                                 starContainer.appendChild(star);
                             }
 
@@ -1584,7 +1375,7 @@
                                     allStars.forEach(s => {
                                         s.style.color = s.dataset.value <= newCurrentValue ? '#f59e0b' : '#d1d5db';
                                     });
-                                    // Trigger validation & draft
+                                    // Trigger validation
                                     hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
                                 }
                             });
@@ -1696,9 +1487,8 @@
         }
 
         function renderResultsTable(container, questions, responses) {
-            // --- PC View (Table) ---
             const tableContainer = document.createElement('div');
-            tableContainer.className = 'hidden md:block overflow-x-auto bg-white rounded-lg shadow';
+            tableContainer.className = 'overflow-x-auto bg-white rounded-lg shadow';
 
             const table = document.createElement('table');
             table.className = 'min-w-full divide-y divide-gray-200';
@@ -1757,61 +1547,9 @@
                 tbody.appendChild(tr);
             });
             table.appendChild(tbody);
+
             tableContainer.appendChild(table);
             container.appendChild(tableContainer);
-
-            // --- Mobile View (Cards) ---
-            const mobileContainer = document.createElement('div');
-            mobileContainer.className = 'md:hidden space-y-4';
-
-            responses.forEach(res => {
-                const card = document.createElement('div');
-                card.className = 'bg-white p-4 rounded-lg shadow border border-gray-100';
-
-                // Header
-                const header = document.createElement('div');
-                header.className = 'flex justify-between items-center mb-3 pb-2 border-b border-gray-100';
-
-                const timeSpan = document.createElement('span');
-                timeSpan.className = 'text-xs text-gray-500';
-                timeSpan.innerText = res.createdAt ? formatTime(res.createdAt) : 'N/A';
-
-                const senderSpan = document.createElement('span');
-                senderSpan.className = 'text-xs font-medium text-gray-700';
-                senderSpan.innerText = res.senderName || `ID: ${res.uid.slice(0, 6)}`;
-
-                header.appendChild(timeSpan);
-                header.appendChild(senderSpan);
-                card.appendChild(header);
-
-                // Content
-                const content = document.createElement('div');
-                content.className = 'space-y-3';
-
-                questions.forEach(q => {
-                    const item = document.createElement('div');
-
-                    const qTitle = document.createElement('p');
-                    qTitle.className = 'text-[10px] uppercase tracking-wide text-gray-400 font-bold mb-0.5';
-                    qTitle.innerText = q.text;
-
-                    const aText = document.createElement('p');
-                    aText.className = 'text-sm text-gray-800 break-words';
-                    const answer = res.responses[q.id];
-                    if (Array.isArray(answer)) {
-                        aText.innerText = answer.join(', ');
-                    } else {
-                        aText.innerText = answer || '（回答なし）';
-                    }
-
-                    item.appendChild(qTitle);
-                    item.appendChild(aText);
-                    content.appendChild(item);
-                });
-                card.appendChild(content);
-                mobileContainer.appendChild(card);
-            });
-            container.appendChild(mobileContainer);
         }
 
         function renderGraphs(container, questions, responses) {
@@ -1821,7 +1559,7 @@
             grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
 
             questions.forEach(q => {
-                if (q.type !== 'star' && q.type !== 'selection' && q.type !== 'multi_selection') {
+                if (q.type !== 'star' && q.type !== 'selection') {
                     return;
                 }
 
@@ -1837,22 +1575,11 @@
                     const allScores = responses.map(r => r.responses[q.id]).filter(Boolean).map(Number);
                     if (allScores.length > 0) {
                         const avg = allScores.reduce((a, b) => a + b, 0) / allScores.length;
-                        const percent = (avg / 5) * 100;
-
                         const avgEl = document.createElement('div');
                         avgEl.className = 'text-center py-4';
-
-                        const starOverlay = `
-                            <div class="relative inline-block text-3xl tracking-widest" title="${avg.toFixed(2)} / 5.0">
-                                <div class="text-gray-200">★★★★★</div>
-                                <div class="absolute top-0 left-0 overflow-hidden text-amber-500 whitespace-nowrap" style="width: ${percent}%">★★★★★</div>
-                            </div>
-                        `;
-
                         avgEl.innerHTML = `
-                            <div class="text-4xl font-bold text-gray-800 mb-1">${avg.toFixed(2)}</div>
-                            ${starOverlay}
-                            <div class="text-xs text-gray-500 mt-2">平均 (${allScores.length}件の回答)</div>
+                            <div class="text-5xl font-bold text-amber-500">${avg.toFixed(2)}</div>
+                            <div class="text-sm text-gray-500 mt-1">平均 (${allScores.length}件の回答)</div>
                         `;
                         card.appendChild(avgEl);
                     } else {
@@ -1916,74 +1643,10 @@
                     }
                     grid.appendChild(card);
                 }
-
-                if (q.type === 'multi_selection') {
-                    const answerCounts = {};
-                    q.options.forEach(opt => { answerCounts[opt] = 0; });
-
-                    let totalAnswers = 0;
-                    responses.forEach(r => {
-                        const answers = r.responses[q.id];
-                        if (Array.isArray(answers)) {
-                            answers.forEach(ans => {
-                                if (answerCounts.hasOwnProperty(ans)) {
-                                    answerCounts[ans]++;
-                                    totalAnswers++;
-                                }
-                            });
-                        }
-                    });
-
-                    if (totalAnswers > 0) {
-                        const canvasContainer = document.createElement('div');
-                        canvasContainer.className = 'relative h-64 w-full';
-                        const canvas = document.createElement('canvas');
-                        canvasContainer.appendChild(canvas);
-                        card.appendChild(canvasContainer);
-
-                        new Chart(canvas, {
-                            type: 'bar',
-                            data: {
-                                labels: Object.keys(answerCounts),
-                                datasets: [{
-                                    label: '回答数',
-                                    data: Object.values(answerCounts),
-                                    backgroundColor: '#3B82F6',
-                                    borderRadius: 4
-                                }]
-                            },
-                            options: {
-                                indexAxis: 'y',
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: function (context) {
-                                                const value = context.parsed.x;
-                                                return `${value}件`;
-                                            }
-                                        }
-                                    }
-                                },
-                                scales: {
-                                    x: {
-                                        beginAtZero: true,
-                                        ticks: { stepSize: 1 }
-                                    }
-                                }
-                            }
-                        });
-                    } else {
-                        card.innerHTML += '<p class="text-sm text-gray-400">まだ回答がありません。</p>';
-                    }
-                    grid.appendChild(card);
-                }
             });
 
             if (grid.children.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">グラフで表示できる質問タイプ（星評価・選択式）がありません。</div>';
+                container.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">グラフで表示できる質問タイプ（星評価・単一選択）がありません。</div>';
             } else {
                 container.appendChild(grid);
             }
@@ -2155,7 +1818,6 @@
                 else bubbleClass += "bg-amber-50 border border-amber-200 text-amber-900 rounded-bl-none shadow-amber-100";
             } else if (isMyMessage) bubbleClass += "bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-br-none";
             else bubbleClass += "bg-white text-gray-800 border border-gray-100 rounded-bl-none";
-            bubbleClass += " select-text";
             bubble.className = bubbleClass;
 
             if (msg.replyToId && msg.replyToText) {
@@ -2259,10 +1921,6 @@
             }
         }
 
-        // ==========================================================================================
-        //  Application Layer
-        //  (User Actions & Handlers)
-        // ==========================================================================================
         window.handleLogin = async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;
@@ -2290,35 +1948,27 @@
                     name,
                     type,
                     createdAt: serverTimestamp(),
-                    createdBy: currentUser.uid,
-                    order: Date.now()
+                    createdBy: currentUser.uid
                 };
 
                 if (type === 'chat') {
                     roomData.isPublic = document.getElementById('new-room-public').checked;
                     roomData.canComment = document.getElementById('new-room-comment').checked;
                 } else if (type === 'image') {
-                    const val = document.getElementById('room-image-url-input').value;
-                    if (!val || !val.trim()) throw new Error("画像URLが入力されていません。");
-
-                    const urls = val.split(/[\n,]/).map(u => u.trim()).filter(u => u);
-                    if (urls.length === 0) throw new Error("画像URLが入力されていません。");
-
-                    urls.forEach(u => {
-                        try {
-                            new URL(u);
-                        } catch (_) {
-                            throw new Error("無効なURLが含まれています: " + u);
-                        }
-                    });
-
-                    roomData.imageUrls = urls;
-                    roomData.imageUrl = urls[0]; // Legacy support
+                    const imageUrl = document.getElementById('room-image-url-input').value;
+                    if (!imageUrl) throw new Error("画像URLが入力されていません。");
+                    try {
+                        // Validate URL format
+                        new URL(imageUrl);
+                    } catch (_) {
+                        throw new Error("無効なURL形式です。");
+                    }
+                    roomData.imageUrl = imageUrl;
                     roomData.isPublic = true;
                 } else if (type === 'survey') {
                     if (!file) throw new Error("CSVファイルが選択されていません。");
                     roomData.questions = await parseCsv(file);
-                    roomData.isPublic = true;
+                    roomData.isPublic = true; // 画像とアンケートは常に公開
                 }
 
                 const docRef = await addDoc(collection(db, "rooms"), roomData);
@@ -2436,51 +2086,8 @@
 
         document.getElementById('send-btn').addEventListener('click', (e) => { e.preventDefault(); sendMessage(); });
 
-        window.handleDownload = async () => {
+        window.downloadExcel = async () => {
             if (!currentRoomId) { showToast("ルームを選択してください", "error"); return; }
-
-            const room = allRoomsData[currentRoomId];
-            if (!room) return;
-
-            if (room.type === 'survey_result') {
-                window.showConfirm("アンケート結果をCSV形式でダウンロードしますか？", async () => {
-                    try {
-                        const originalSurveyRef = doc(db, "rooms", room.sourceSurveyId);
-                        const originalSurveySnap = await getDoc(originalSurveyRef);
-                        if (!originalSurveySnap.exists()) throw new Error("元のアンケートデータが見つかりません");
-
-                        const questions = originalSurveySnap.data().questions;
-                        const q = query(collection(db, "survey_responses"), where("roomId", "==", room.sourceSurveyId), orderBy("createdAt", "desc"));
-                        const querySnapshot = await getDocs(q);
-
-                        const data = querySnapshot.docs.map(doc => {
-                            const d = doc.data();
-                            const row = {
-                                "回答日時": d.createdAt ? d.createdAt.toDate().toLocaleString('ja-JP') : "",
-                                "回答者": d.senderName || d.uid,
-                            };
-                            questions.forEach(q => {
-                                const ans = d.responses[q.id];
-                                row[q.text] = Array.isArray(ans) ? ans.join(", ") : (ans || "");
-                            });
-                            return row;
-                        });
-
-                        const wb = XLSX.utils.book_new();
-                        const ws = XLSX.utils.json_to_sheet(data);
-                        XLSX.utils.book_append_sheet(wb, ws, "アンケート結果");
-                        XLSX.writeFile(wb, `survey_results_${room.name}_${new Date().toISOString().slice(0, 10)}.csv`);
-                        showToast("ダウンロードを開始しました", "success");
-
-                    } catch (error) {
-                        console.error(error);
-                        showToast("ダウンロード失敗: " + error.message, "error");
-                    }
-                });
-                return;
-            }
-
-            // Chat Download
             window.showConfirm("このルームの履歴をダウンロードしますか？", async () => {
                 try {
                     const q = query(collection(db, "messages"), where("roomId", "==", currentRoomId), orderBy("createdAt", "asc"));
@@ -2623,10 +2230,13 @@
             const originalHtml = bubble.dataset.originalHtml;
 
             try {
-                const updateData = { text: val };
-                if (!isAdmin) {
-                    updateData.clientId = myClientId;
-                }
+                // 【修正】updatedAtを追加し、clientId送信を削除（ルールの更新ポリシー違反を解消）
+                const updateData = {
+                    text: val,
+                    updatedAt: serverTimestamp()
+                };
+
+                // 元のコードでここにあった if (!isAdmin) { updateData.clientId = ... } は削除済み
 
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = originalHtml;
@@ -2663,7 +2273,7 @@
             }
         };
 
-        // 修正: テキストエリアの高さ自動調整ロジック（チラつき防止）
+        // 修正: テキストエリアの高さ自動調整ロジック
         ui.messageInput.addEventListener('input', function () {
             if (this.scrollHeight > this.clientHeight) {
                 this.style.height = 'auto';
@@ -2687,15 +2297,6 @@
             });
         });
     </script>
-</body>
-
-</html> dialog.addEventListener('click', (e) => {
-if (e.target === dialog) {
-dialog.close();
-}
-});
-});
-</script>
 </body>
 
 </html>
