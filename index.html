@@ -1,0 +1,2701 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <title>Multi-Room Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .pop-in {
+            animation: popIn 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        @keyframes popIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .like-bounce {
+            animation: bounce 0.3s;
+        }
+
+        @keyframes bounce {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.4);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .sidebar-transition {
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .slide-up {
+            animation: slideUp 0.2s ease-out forwards;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .badge-pop {
+            animation: badgePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes badgePop {
+            0% {
+                transform: scale(0);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .spinner {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: #3b82f6;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+
+        .spinner-sm {
+            display: inline-block;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border-left-color: #fff;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: -3px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast {
+            min-width: 300px;
+            max-width: 90vw;
+            padding: 12px 20px;
+            border-radius: 50px;
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            animation: toastSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        .toast.hide {
+            animation: toastFadeOut 0.3s ease-in forwards;
+        }
+
+        .toast-success {
+            background-color: #10b981;
+        }
+
+        .toast-error {
+            background-color: #ef4444;
+        }
+
+        .toast-info {
+            background-color: #3b82f6;
+        }
+
+        @keyframes toastSlideDown {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes toastFadeOut {
+            to {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+        }
+
+        .reply-quote {
+            font-size: 0.75rem;
+            color: #6b7280;
+            border-left: 3px solid #cbd5e1;
+            padding-left: 0.5rem;
+            margin-bottom: 0.25rem;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            opacity: 0.9;
+            background-color: rgba(241, 245, 249, 0.6);
+            padding-right: 0.5rem;
+            padding-top: 0.1rem;
+            padding-bottom: 0.1rem;
+            border-radius: 0 4px 4px 0;
+            transition: all 0.2s;
+        }
+
+        .reply-quote:hover {
+            opacity: 1;
+            color: #1e40af;
+            border-left-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+
+        .float-btn {
+            position: absolute;
+            z-index: 50;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .float-btn:active {
+            transform: scale(0.95);
+        }
+
+        dialog {
+            cursor: default;
+        }
+
+        dialog::backdrop {
+            cursor: pointer;
+        }
+
+        .room-type-btn {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            font-size: 0.875rem;
+            font-weight: 500;
+            background-color: #f8fafc;
+            color: #475569;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 h-[100dvh] flex overflow-hidden select-none">
+
+    <div id="toast-container"></div>
+
+    <aside id="sidebar"
+        class="fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white transform -translate-x-full transition-transform duration-300 md:relative md:translate-x-0 flex flex-col shadow-xl">
+        <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
+            <h2 class="font-bold text-lg tracking-wide">ROOMs</h2>
+            <button onclick="toggleSidebar()" class="md:hidden text-gray-400 hover:text-white">✕</button>
+        </div>
+
+        <div id="admin-controls" class="hidden p-3 bg-indigo-900/50 border-b border-indigo-500/30 space-y-2">
+            <button onclick="openCreateRoomModal()"
+                class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm py-2 rounded shadow flex items-center justify-center gap-1">
+                <span>+</span> 新しいルーム
+            </button>
+            <button onclick="openManageLabels()"
+                class="w-full bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 rounded shadow flex items-center justify-center gap-1 border border-slate-600">
+                <span>🏷️</span> バッジ管理
+            </button>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto p-2 space-y-1" id="room-list">
+            <div class="text-center text-slate-500 text-sm mt-4">読み込み中...</div>
+        </nav>
+
+        <div class="p-4 border-t border-slate-800 bg-slate-900">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs text-gray-400">ログイン情報</span>
+                <div class="flex gap-2">
+                    <button onclick="openChangeNameModal()"
+                        class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1" title="名前変更">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+                            <path
+                                d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                        </svg>
+                        名前
+                    </button>
+                    <button onclick="openSelectLabelModal()"
+                        class="text-xs text-green-400 hover:text-green-300 flex items-center gap-1" title="バッジ選択">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+                            <path fill-rule="evenodd"
+                                d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        バッジ
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <div id="user-info" class="text-sm font-medium text-white truncate">ゲスト</div>
+                <div id="current-label-display" class="text-xs text-green-400 h-4 truncate"></div>
+            </div>
+
+            <button id="auth-btn" onclick="openLoginModal()"
+                class="text-xs text-slate-500 hover:text-white underline w-full text-left">
+                管理者ログイン
+            </button>
+        </div>
+    </aside>
+
+    <div class="flex-1 flex flex-col relative w-full h-full bg-white">
+        <header
+            class="bg-white/90 backdrop-blur shadow-sm z-20 px-4 py-3 flex justify-between items-center border-b border-gray-100">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="md:hidden text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                    </svg>
+                </button>
+                <div>
+                    <h1 id="current-room-name" class="font-bold text-gray-800 text-base leading-tight">ルームを選択</h1>
+                    <div id="status" class="text-[10px] text-gray-500 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-gray-300"></span> 待機中
+                    </div>
+                </div>
+            </div>
+
+            <button id="download-btn" onclick="handleDownload()" title="保存"
+                class="text-gray-500 hover:text-green-600 transition p-2 bg-gray-50 rounded-full hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+            </button>
+        </header>
+
+        <main id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar bg-gray-50">
+            <div id="loading-spinner" class="spinner hidden"></div>
+            <div id="empty-msg" class="text-center text-gray-400 mt-10 text-sm">左のメニューからルームを選択してください</div>
+        </main>
+
+        <button id="scroll-bottom-btn" onclick="scrollToBottom()"
+            class="float-btn hidden fixed bottom-40 right-6 bg-gray-600/80 hover:bg-gray-800 text-white rounded-full p-3 shadow-lg backdrop-blur-sm"
+            title="最新のコメントへ">
+            <span id="unread-badge"
+                class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-white badge-pop shadow-sm">0</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
+                stroke="currentColor" class="w-5 h-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
+            </svg>
+        </button>
+
+        <button id="return-btn" onclick="returnToOrigin()"
+            class="float-btn hidden fixed bottom-24 left-1/2 -translate-x-1/2 bg-blue-600/90 hover:bg-blue-700 text-white rounded-full px-4 py-2 shadow-lg backdrop-blur-sm flex items-center gap-2 fade-in">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                <path fill-rule="evenodd"
+                    d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z"
+                    clip-rule="evenodd" />
+            </svg>
+            <span class="text-xs font-bold">元のコメントに戻る</span>
+        </button>
+
+        <footer class="bg-white border-t border-gray-100 z-20 w-full">
+            <div id="reply-preview-bar"
+                class="hidden slide-up grid grid-cols-[1fr_auto] items-center gap-3 bg-blue-50 border-t border-blue-200 border-l-4 border-l-blue-500 p-3 shadow-sm w-full">
+
+                <div class="flex flex-col overflow-hidden min-w-0">
+                    <span class="text-xs font-bold text-blue-600 mb-0.5 flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+                            <path fill-rule="evenodd"
+                                d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        返信先: <span id="reply-target-name"></span>
+                    </span>
+                    <span id="reply-target-text" class="text-gray-600 text-xs truncate block"></span>
+                </div>
+
+                <button onclick="cancelReply()"
+                    class="text-gray-400 hover:text-red-500 hover:bg-red-100 p-2 rounded-full transition-colors"
+                    title="返信をキャンセル">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                        <path
+                            d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-4 pt-2">
+                <div class="flex justify-end mb-2 px-1">
+                    <label
+                        class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 hover:text-gray-700 select-none">
+                        <input type="checkbox" id="send-on-enter"
+                            class="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5">
+                        Enterで送信
+                    </label>
+                </div>
+
+                <div id="message-form-container"
+                    class="relative flex items-end gap-2 bg-gray-100 p-2 rounded-xl border border-transparent focus-within:bg-white focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100 transition-all duration-200">
+                    <textarea id="message-input" rows="1" placeholder="メッセージを入力..."
+                        class="w-full bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 px-2 text-sm text-gray-800 placeholder-gray-400"
+                        disabled></textarea>
+                    <button id="send-btn"
+                        class="p-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-transform active:scale-95 flex-shrink-0"
+                        disabled aria-label="メッセージを送信">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                            <path
+                                d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden glass"></div>
+
+    <dialog id="login-modal" class="p-6 rounded-xl shadow-2xl backdrop:bg-black/60 w-80">
+        <h3 class="font-bold text-lg mb-4">管理者ログイン</h3>
+        <form method="dialog" onsubmit="handleLogin(event)" class="flex flex-col gap-3">
+            <input type="email" id="email" placeholder="メールアドレス" class="border rounded px-3 py-2 w-full" required>
+            <input type="password" id="password" placeholder="パスワード" class="border rounded px-3 py-2 w-full" required>
+            <div class="flex justify-end gap-2 mt-2">
+                <button type="button" onclick="document.getElementById('login-modal').close()"
+                    class="text-gray-500 text-sm px-3 py-1">キャンセル</button>
+                <button type="submit"
+                    class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">ログイン</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="create-room-modal" class="p-6 rounded-xl shadow-2xl backdrop:bg-black/60 w-96">
+        <h3 class="font-bold text-lg mb-4">新しいルームを作成</h3>
+        <form method="dialog" onsubmit="handleCreateRoom(event)" class="flex flex-col gap-4">
+            <div>
+                <label class="text-xs font-medium text-gray-600">ルーム名</label>
+                <input type="text" id="new-room-name" placeholder="（例：A会場）"
+                    class="border rounded px-3 py-2 w-full mt-1 text-sm" required>
+            </div>
+
+            <div>
+                <label class="text-xs font-medium text-gray-600">ルームタイプ</label>
+                <div id="room-type-selector" class="flex gap-2 mt-1">
+                    <button type="button" data-type="chat"
+                        class="room-type-btn flex-1 bg-indigo-600 text-white">チャット</button>
+                    <button type="button" data-type="image" class="room-type-btn flex-1">画像</button>
+                    <button type="button" data-type="survey" class="room-type-btn flex-1">アンケート</button>
+                </div>
+                <input type="hidden" id="new-room-type" value="chat">
+            </div>
+
+            <div id="file-upload-section" class="hidden">
+                <label id="file-upload-label" class="text-xs font-medium text-gray-600">ファイル</label>
+                <input type="file" id="room-file-input"
+                    class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
+                <textarea id="room-image-url-input"
+                    placeholder="https://example.com/1.png&#10;https://example.com/2.png"
+                    class="hidden mt-1 block w-full border rounded px-3 py-2 text-sm" rows="3"></textarea>
+                <p id="file-upload-info" class="text-xs text-gray-500 mt-1"></p>
+            </div>
+
+            <div id="chat-options">
+                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" id="new-room-public" class="w-4 h-4 rounded" checked>
+                    公開する（ゲストも入室可能）
+                </label>
+                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" id="new-room-comment" class="w-4 h-4 rounded" checked>
+                    コメント書き込みを許可する
+                </label>
+            </div>
+
+            <div class="flex justify-end gap-2 mt-3">
+                <button type="button" onclick="document.getElementById('create-room-modal').close()"
+                    class="text-gray-500 text-sm px-3 py-1">キャンセル</button>
+                <button type="submit"
+                    class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">作成</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="manage-labels-modal" class="p-6 rounded-xl shadow-2xl backdrop:bg-black/60 w-80">
+        <h3 class="font-bold text-lg mb-2">バッジ管理（全ルーム共通）</h3>
+        <p class="text-xs text-gray-500 mb-4">全てのルームで使用可能なバッジを設定します</p>
+        <div id="admin-label-list" class="flex flex-wrap gap-2 mb-4"></div>
+        <form method="dialog" onsubmit="handleAddLabel(event)" class="flex gap-2">
+            <input type="text" id="new-label-input" placeholder="新しいバッジ名"
+                class="border rounded px-2 py-1 text-sm flex-1" required>
+            <button type="submit"
+                class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700">追加</button>
+        </form>
+        <div class="flex justify-end mt-4">
+            <button type="button" onclick="document.getElementById('manage-labels-modal').close()"
+                class="text-gray-500 text-sm px-3 py-1">閉じる</button>
+        </div>
+    </dialog>
+
+    <dialog id="select-label-modal" class="p-6 rounded-xl shadow-2xl backdrop:bg-black/60 w-80">
+        <h3 class="font-bold text-lg mb-4">バッジを選択</h3>
+        <div id="user-label-list" class="flex flex-col gap-2"></div>
+        <div class="flex justify-end mt-4">
+            <button type="button" onclick="document.getElementById('select-label-modal').close()"
+                class="text-gray-500 text-sm px-3 py-1">キャンセル</button>
+        </div>
+    </dialog>
+
+    <dialog id="change-name-modal" class="p-6 rounded-xl shadow-2xl backdrop:bg-black/60 w-80">
+        <h3 class="font-bold text-lg mb-4">名前の設定</h3>
+        <form method="dialog" onsubmit="handleSaveName(event)" class="flex flex-col gap-4">
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">表示名</label>
+                <input type="text" id="display-name-input" placeholder="あなたの名前"
+                    class="border rounded px-3 py-2 w-full text-sm" maxlength="20">
+                <p class="text-[10px] text-gray-400 mt-1">※空欄の場合はIDが表示されます</p>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('change-name-modal').close()"
+                    class="text-gray-500 text-sm px-3 py-1">キャンセル</button>
+                <button type="submit"
+                    class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">保存</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="confirm-modal" class="p-6 rounded-xl shadow-2xl backdrop:bg-black/60 w-80">
+        <h3 id="confirm-msg" class="font-bold text-lg mb-4 text-center">確認</h3>
+        <div class="flex justify-center gap-4 mt-2">
+            <button id="confirm-cancel-btn"
+                class="text-gray-500 text-sm px-4 py-2 hover:bg-gray-100 rounded">キャンセル</button>
+            <button id="confirm-ok-btn"
+                class="bg-red-500 text-white px-6 py-2 rounded text-sm hover:bg-red-600 font-bold shadow">実行</button>
+        </div>
+    </dialog>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment, getDocs, where, deleteDoc, arrayUnion, arrayRemove, setDoc, getDoc, limitToLast, getCountFromServer } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
+
+        // ==========================================================================================
+        //  Infrastructure Layer
+        //  (Firebase Configuration & Initialization)
+        // ==========================================================================================
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCQ8OL6GhYT5vza6v4ckXKqtDgkaAFTMnQ",
+            authDomain: "relationship-building.firebaseapp.com",
+            projectId: "relationship-building",
+            storageBucket: "relationship-building.appspot.com",
+            messagingSenderId: "202421782278",
+            appId: "1:202421782278:web:ba0af8d560361b5aa4c087",
+            measurementId: "G-JWSTMBH5HB"
+        };
+
+        console.log("App Version: 8.0 - UI/UX & Fixes");
+
+        // ==========================================================================================
+        //  UI Layer
+        //  (Notifications & Global UI Helpers)
+        // ==========================================================================================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type === 'error' ? 'toast-error' : type === 'info' ? 'toast-info' : 'toast-success'}`;
+            let icon = type === 'success' ? '<span>✅</span>' : type === 'error' ? '<span>⚠️</span>' : '<span>ℹ️</span>';
+            toast.innerHTML = `${icon}<span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('hide');
+                setTimeout(() => { if (toast.parentElement) toast.remove(); }, 300);
+            }, 3000);
+        }
+        window.showToast = showToast;
+
+        window.showConfirm = (message, onConfirm) => {
+            const modal = document.getElementById('confirm-modal');
+            const msgEl = document.getElementById('confirm-msg');
+            const okBtn = document.getElementById('confirm-ok-btn');
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+
+            msgEl.innerText = message;
+
+            okBtn.onclick = () => { onConfirm(); modal.close(); };
+            cancelBtn.onclick = () => { modal.close(); };
+
+            modal.onclick = (e) => {
+                const rect = modal.getBoundingClientRect();
+                if (e.clientY < rect.top || e.clientY > rect.bottom ||
+                    e.clientX < rect.left || e.clientX > rect.right) {
+                    modal.close();
+                }
+            };
+
+            modal.showModal();
+        };
+
+        function escapeHtml(str) {
+            if (!str) return "";
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // ==========================================================================================
+        //  Domain Layer
+        //  (Logic & Formatting)
+        // ==========================================================================================
+        // 修正: 日付フォーマットロジックの改善（今日なら時刻のみ、以外は日付+時刻）
+        function formatTime(timestamp) {
+            const date = timestamp ? timestamp.toDate() : new Date();
+            const now = new Date();
+
+            const isToday = date.getDate() === now.getDate() &&
+                date.getMonth() === now.getMonth() &&
+                date.getFullYear() === now.getFullYear();
+
+            const timeStr = date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+
+            if (isToday) {
+                return timeStr;
+            } else {
+                return `${date.getMonth() + 1}/${date.getDate()} ${timeStr}`;
+            }
+        }
+
+        // 修正: URL正規表現の改善（末尾の記号を除外）
+        function createContentWithLinks(text) {
+            const fragment = document.createDocumentFragment();
+            // 末尾の記号(.,;!?など)をURLに含めない正規表現
+            const urlRegex = /(https?:\/\/[^\s]*[^.,;!?")\s])/g;
+            let lastIndex = 0;
+            let match;
+            while ((match = urlRegex.exec(text)) !== null) {
+                const preText = text.substring(lastIndex, match.index);
+                if (preText) fragment.appendChild(document.createTextNode(preText));
+                const a = document.createElement('a');
+                a.href = match[0];
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                a.className = "text-blue-500 hover:underline break-all";
+                a.textContent = match[0];
+                a.onclick = (e) => e.stopPropagation();
+                fragment.appendChild(a);
+                lastIndex = urlRegex.lastIndex;
+            }
+            const remainingText = text.substring(lastIndex);
+            if (remainingText) fragment.appendChild(document.createTextNode(remainingText));
+            return fragment;
+        }
+
+        let myClientId = localStorage.getItem('chatClientId');
+        if (!myClientId) {
+            myClientId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+            localStorage.setItem('chatClientId', myClientId);
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+
+
+
+        // ==========================================================================================
+        //  Application Layer
+        //  (State Management)
+        // ==========================================================================================
+        let currentUser = null;
+        let isAdmin = false;
+
+        const ADMIN_UIDS = [
+            "WgSbEj16OPgrrtXkvoM2HCRoZtm1",
+            "H314j33X6fYvGs3XzlONIeLyft63" //浅野とくめこう
+        ];
+
+        let currentRoomId = null;
+        let unsubscribeMessages = null;
+        let unsubscribeRooms = null;
+        let allRoomsData = {};
+        let mySelectedLabel = localStorage.getItem('lastSelectedLabel') || null;
+        let globalBadges = [];
+        let replyingTo = null;
+        let returnToMessageId = null;
+        let unreadCount = 0;
+
+        let currentMessageLimit = 20;
+        let isLoadingHistory = false;
+
+        const getDisplayName = () => {
+            if (isAdmin) return localStorage.getItem('chatAdminName') || "";
+            return localStorage.getItem('chatGuestName') || "";
+        };
+        const setDisplayName = (name) => {
+            if (isAdmin) localStorage.setItem('chatAdminName', name);
+            else localStorage.setItem('chatGuestName', name);
+        };
+
+
+
+        // ==========================================================================================
+        //  UI Layer
+        //  (DOM Elements & Event Bindings)
+        // ==========================================================================================
+        const ui = {
+            sidebar: document.getElementById('sidebar'),
+            overlay: document.getElementById('overlay'),
+            roomList: document.getElementById('room-list'),
+            chatContainer: document.getElementById('chat-container'),
+            messageInput: document.getElementById('message-input'),
+            sendBtn: document.getElementById('send-btn'),
+            roomName: document.getElementById('current-room-name'),
+            status: document.getElementById('status'),
+            adminControls: document.getElementById('admin-controls'),
+            authBtn: document.getElementById('auth-btn'),
+            userInfo: document.getElementById('user-info'),
+            labelDisplay: document.getElementById('current-label-display'),
+            sendOnEnterCheckbox: document.getElementById('send-on-enter'),
+            messageFormContainer: document.getElementById('message-form-container'),
+            scrollBottomBtn: document.getElementById('scroll-bottom-btn'),
+            unreadBadge: document.getElementById('unread-badge'),
+            returnBtn: document.getElementById('return-btn'),
+            loadingSpinner: document.getElementById('loading-spinner'),
+            downloadBtn: document.getElementById('download-btn')
+        };
+
+        const savedSetting = localStorage.getItem('sendOnEnter');
+        if (savedSetting !== null) {
+            ui.sendOnEnterCheckbox.checked = (savedSetting === 'true');
+        } else {
+            ui.sendOnEnterCheckbox.checked = (window.innerWidth >= 768);
+        }
+        ui.sendOnEnterCheckbox.addEventListener('change', (e) => localStorage.setItem('sendOnEnter', e.target.checked));
+
+        ui.chatContainer.addEventListener('scroll', () => {
+            const threshold = 200;
+            const isScrolledUp = ui.chatContainer.scrollHeight - ui.chatContainer.scrollTop - ui.chatContainer.clientHeight > threshold;
+            if (isScrolledUp) {
+                ui.scrollBottomBtn.classList.remove('hidden');
+            } else {
+                ui.scrollBottomBtn.classList.add('hidden');
+                if (unreadCount > 0) {
+                    unreadCount = 0;
+                    updateBadgeUI();
+                }
+            }
+
+            if (ui.chatContainer.scrollTop === 0 && currentRoomId && !isLoadingHistory) {
+                if (ui.chatContainer.children.length > 5) {
+                    loadMoreHistory();
+                }
+            }
+        });
+
+        function loadMoreHistory() {
+            isLoadingHistory = true;
+            ui.loadingSpinner.classList.remove('hidden');
+
+            const previousHeight = ui.chatContainer.scrollHeight;
+            currentMessageLimit += 20;
+
+            loadMessages(currentRoomId, () => {
+                const newHeight = ui.chatContainer.scrollHeight;
+                ui.chatContainer.scrollTop = newHeight - previousHeight;
+                ui.loadingSpinner.classList.add('hidden');
+                isLoadingHistory = false;
+            });
+        }
+
+        function updateBadgeUI() {
+            if (unreadCount > 0) {
+                ui.unreadBadge.innerText = unreadCount > 99 ? '99+' : unreadCount;
+                ui.unreadBadge.classList.remove('hidden');
+                ui.unreadBadge.classList.remove('badge-pop');
+                void ui.unreadBadge.offsetWidth;
+                ui.unreadBadge.classList.add('badge-pop');
+            } else {
+                ui.unreadBadge.classList.add('hidden');
+            }
+        }
+
+        window.scrollToBottom = () => {
+            ui.chatContainer.scrollTo({ top: ui.chatContainer.scrollHeight, behavior: 'smooth' });
+            unreadCount = 0;
+            updateBadgeUI();
+        };
+
+        window.returnToOrigin = () => {
+            if (returnToMessageId) {
+                scrollToMessage(returnToMessageId, false);
+                returnToMessageId = null;
+                ui.returnBtn.classList.add('hidden');
+            }
+        };
+
+        window.scrollToMessage = (targetId, recordOrigin = true) => {
+            const target = document.getElementById(`row-${targetId}`);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.classList.remove('bg-yellow-200', 'transition-colors', 'duration-1000');
+                setTimeout(() => {
+                    target.classList.add('bg-yellow-200', 'transition-colors', 'duration-1000');
+                    setTimeout(() => target.classList.remove('bg-yellow-200'), 1500);
+                }, 10);
+            } else {
+                showToast("元のメッセージが見つかりません", "error");
+            }
+        };
+
+        window.handleQuoteClick = async (targetId, currentMessageId) => {
+            if (document.getElementById('row-' + targetId)) {
+                returnToMessageId = currentMessageId;
+                ui.returnBtn.classList.remove('hidden');
+                scrollToMessage(targetId);
+                return;
+            }
+
+            showToast("過去のメッセージを検索中...", "info");
+            try {
+                const targetDoc = await getDoc(doc(db, "messages", targetId));
+                if (!targetDoc.exists()) {
+                    showToast("元のメッセージは削除されています", "error");
+                    return;
+                }
+
+                const q = query(collection(db, "messages"),
+                    where("roomId", "==", currentRoomId),
+                    where("createdAt", ">", targetDoc.data().createdAt),
+                    orderBy("createdAt", "asc")
+                );
+                const snapshot = await getCountFromServer(q);
+                const count = snapshot.data().count;
+
+                currentMessageLimit = count + 20;
+
+                loadMessages(currentRoomId, () => {
+                    returnToMessageId = currentMessageId;
+                    ui.returnBtn.classList.remove('hidden');
+                    setTimeout(() => scrollToMessage(targetId), 300);
+                });
+
+            } catch (e) {
+                console.error(e);
+                if (e.code === 'failed-precondition') {
+                    showToast("管理設定（インデックス）が必要です。コンソールを確認してください。", "error");
+                } else {
+                    showToast("メッセージの取得に失敗しました", "error");
+                }
+            }
+        };
+
+        // 修正: 改行をスペースに置換
+        window.startReply = (id, text, name) => {
+            const cleanText = text.replace(/\r?\n/g, ' ');
+            replyingTo = { id, text: cleanText, name };
+            const bar = document.getElementById('reply-preview-bar');
+            bar.classList.remove('hidden');
+            document.getElementById('reply-target-name').innerText = name;
+            document.getElementById('reply-target-text').innerText = cleanText;
+            ui.messageInput.placeholder = `${name} さんに返信中...`;
+            ui.messageFormContainer.classList.add('bg-blue-50', 'ring-2', 'ring-blue-400', 'border-blue-400');
+            ui.messageFormContainer.classList.replace('bg-gray-100', 'bg-blue-50');
+            ui.messageInput.focus();
+        };
+
+        window.cancelReply = () => {
+            replyingTo = null;
+            const bar = document.getElementById('reply-preview-bar');
+            bar.classList.add('hidden');
+            ui.messageInput.placeholder = "メッセージを入力...";
+            ui.messageFormContainer.classList.remove('bg-blue-50', 'ring-2', 'ring-blue-400', 'border-blue-400');
+            ui.messageFormContainer.classList.replace('bg-blue-50', 'bg-gray-100');
+        };
+
+        window.openChangeNameModal = () => {
+            const current = getDisplayName();
+            document.getElementById('display-name-input').value = current;
+            document.getElementById('change-name-modal').showModal();
+        };
+
+        window.handleSaveName = (e) => {
+            e.preventDefault();
+            const input = document.getElementById('display-name-input');
+            const newName = input.value.trim();
+            setDisplayName(newName);
+            updateAuthUI();
+            document.getElementById('change-name-modal').close();
+            showToast("名前を保存しました", "success");
+        };
+
+        onSnapshot(doc(db, "settings", "badges"), (docSnap) => {
+            if (docSnap.exists()) {
+                globalBadges = docSnap.data().list || [];
+            } else {
+                globalBadges = [];
+            }
+            if (document.getElementById('manage-labels-modal').open) {
+                renderAdminLabelList();
+            }
+        });
+
+        window.openManageLabels = () => {
+            renderAdminLabelList();
+            document.getElementById('manage-labels-modal').showModal();
+        };
+
+        function renderAdminLabelList() {
+            const container = document.getElementById('admin-label-list');
+            container.innerHTML = '';
+            if (globalBadges.length === 0) {
+                container.innerHTML = '<span class="text-xs text-gray-400">バッジはまだありません</span>';
+                return;
+            }
+            globalBadges.forEach(label => {
+                const badge = document.createElement('span');
+                badge.className = "inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full border";
+                badge.innerHTML = `<span>${escapeHtml(label)}</span><button onclick="removeLabel('${escapeHtml(label)}')" class="text-gray-400 hover:text-red-500 font-bold ml-1">×</button>`;
+                container.appendChild(badge);
+            });
+        }
+
+        window.handleAddLabel = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('new-label-input');
+            const label = input.value.trim();
+            if (!label) return;
+            if (globalBadges.includes(label)) {
+                showToast("そのバッジは既に追加されています", "error");
+                return;
+            }
+            try {
+                const badgesRef = doc(db, "settings", "badges");
+                await setDoc(badgesRef, { list: arrayUnion(label) }, { merge: true });
+                input.value = '';
+                showToast("バッジを追加しました", "success");
+            } catch (err) { console.error(err); showToast("追加エラー: " + err.message, "error"); }
+        };
+
+        window.removeLabel = async (label) => {
+            window.showConfirm(`バッジ「${label}」を削除しますか？`, async () => {
+                try {
+                    await updateDoc(doc(db, "settings", "badges"), { list: arrayRemove(label) });
+                    showToast("バッジを削除しました", "success");
+                } catch (err) { console.error(err); showToast("削除エラー", "error"); }
+            });
+        };
+
+        window.openSelectLabelModal = () => {
+            const list = document.getElementById('user-label-list');
+            list.innerHTML = '';
+            const noLabelBtn = document.createElement('button');
+            noLabelBtn.className = `w-full text-left px-4 py-2 rounded text-sm hover:bg-gray-100 ${!mySelectedLabel ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-700'}`;
+            noLabelBtn.innerText = "指定なし";
+            noLabelBtn.onclick = () => { selectLabel(null); };
+            list.appendChild(noLabelBtn);
+
+            if (globalBadges.length === 0) {
+                list.innerHTML += '<div class="p-2 text-xs text-gray-400 text-center">選択できるバッジがありません</div>';
+            } else {
+                globalBadges.forEach(label => {
+                    const btn = document.createElement('button');
+                    const isSelected = mySelectedLabel === label;
+                    btn.className = `w-full text-left px-4 py-2 rounded text-sm hover:bg-gray-100 ${isSelected ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-700'}`;
+                    btn.innerText = escapeHtml(label);
+                    btn.onclick = () => { selectLabel(label); };
+                    list.appendChild(btn);
+                });
+            }
+            document.getElementById('select-label-modal').showModal();
+        };
+
+        function selectLabel(label) {
+            mySelectedLabel = label;
+            localStorage.setItem('lastSelectedLabel', label || "");
+            updateAuthUI();
+            document.getElementById('select-label-modal').close();
+            showToast("バッジを変更しました", "success");
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            resetUI();
+            if (user) {
+                currentUser = user;
+                isAdmin = ADMIN_UIDS.includes(user.uid);
+                updateAuthUI();
+                loadRoomList();
+            } else {
+                signInAnonymously(auth).catch(console.error);
+            }
+        });
+
+        function resetUI() {
+            currentRoomId = null;
+            currentUser = null;
+            if (unsubscribeMessages) unsubscribeMessages();
+            if (unsubscribeRooms) unsubscribeRooms();
+            ui.chatContainer.innerHTML = '<div id="empty-msg" class="text-center text-gray-400 mt-10 text-sm">左のメニューからルームを選択してください</div>';
+            ui.roomName.innerText = "ルームを選択";
+            ui.messageInput.disabled = true;
+            ui.sendBtn.disabled = true;
+            ui.roomList.innerHTML = '';
+            ui.labelDisplay.innerText = '';
+            cancelReply();
+            ui.scrollBottomBtn.classList.add('hidden');
+            ui.returnBtn.classList.add('hidden');
+            returnToMessageId = null;
+            unreadCount = 0;
+            updateBadgeUI();
+            currentMessageLimit = 20;
+        }
+
+
+
+        // ==========================================================================================
+        //  UI Layer
+        //  (State Updates & Rendering)
+        // ==========================================================================================
+        function updateAuthUI() {
+            let name = getDisplayName();
+            let displayText = escapeHtml(name) || (currentUser ? `ID: ${currentUser.uid.slice(0, 6)}...` : "ゲスト");
+
+            if (mySelectedLabel) ui.labelDisplay.innerText = `[${mySelectedLabel}]`;
+            else ui.labelDisplay.innerText = "";
+
+            if (isAdmin) {
+                ui.status.innerHTML = '<span class="w-2 h-2 rounded-full bg-indigo-500"></span> 管理者モード';
+                ui.userInfo.innerText = `${displayText} (Admin)`;
+                ui.authBtn.innerText = "ログアウト";
+                ui.authBtn.onclick = () => {
+                    signOut(auth).then(() => {
+                        localStorage.removeItem('lastRoomId');
+                        localStorage.removeItem('lastSelectedLabel');
+                        location.reload();
+                    });
+                };
+                ui.adminControls.classList.remove('hidden');
+            } else {
+                ui.status.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> ゲスト接続';
+                ui.userInfo.innerText = displayText;
+                ui.authBtn.innerText = "管理者ログイン";
+                ui.authBtn.onclick = openLoginModal;
+                ui.adminControls.classList.add('hidden');
+            }
+        }
+
+        function loadRoomList() {
+            let q = collection(db, "rooms");
+            // TEMPORARY: Revert to createdAt sorting to ensure rooms appear.
+            // We will migrate data (add 'order' field) then switch back later or handle local sorting.
+            if (!isAdmin) q = query(collection(db, "rooms"), where("isPublic", "==", true), orderBy("createdAt", "desc"));
+            else q = query(collection(db, "rooms"), orderBy("createdAt", "desc"));
+
+            console.log("Loading room list...", { isAdmin });
+
+            unsubscribeRooms = onSnapshot(q, (snapshot) => {
+                console.log("Room snapshot received. Size:", snapshot.size, "Empty:", snapshot.empty);
+                ui.roomList.innerHTML = '';
+                allRoomsData = {};
+                if (snapshot.empty) {
+                    ui.roomList.innerHTML = '<div class="p-4 text-xs text-slate-500 text-center">ルームがありません</div>';
+                    return;
+                }
+
+                let foundLastRoom = false;
+                const lastRoomId = localStorage.getItem('lastRoomId');
+
+                // Convert to array for local sorting
+                let rooms = [];
+                snapshot.forEach(doc => {
+                    rooms.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Setup for Batch Update (Migration)
+                const batch = writeBatch(db);
+                let needsCommit = false;
+
+                // Local Sort: Order (asc) -> CreatedAt (desc)
+                rooms.sort((a, b) => {
+                    let oa = a.order !== undefined ? a.order : 9999999999999;
+                    let ob = b.order !== undefined ? b.order : 9999999999999;
+                    if (oa !== ob) return oa - ob;
+                    // Firestore Timestamps need toDate() for comparison if they are objects,
+                    // but if they are already numbers (e.g., from serverTimestamp()), direct comparison works.
+                    // Assuming createdAt is a Firestore Timestamp object, convert to milliseconds.
+                    const aCreatedAt = a.createdAt && typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+                    const bCreatedAt = b.createdAt && typeof b.createdAt.toDate === 'function' ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+                    return bCreatedAt - aCreatedAt;
+                });
+
+                rooms.forEach((room, index) => {
+                    const id = room.id;
+                    allRoomsData[id] = room;
+
+                    // MIGRATION: If order is missing, assign it.
+                    if (room.order === undefined && isAdmin) {
+                        try {
+                            // Assign index as default order
+                            const ref = doc(db, "rooms", id);
+                            batch.update(ref, { order: index });
+                            needsCommit = true;
+                        } catch (e) { console.error(e); }
+                    }
+
+                    const btn = document.createElement('button');
+                    btn.dataset.roomId = id;
+                    btn.className = `w-full text-left p-3 rounded-lg mb-1 flex items-center justify-between transition-colors outline-none group`;
+
+                    // --- Drag & Drop ---
+                    if (isAdmin) {
+                        btn.draggable = true;
+                        btn.addEventListener('dragstart', (e) => {
+                            e.dataTransfer.setData('text/plain', id);
+                            e.dataTransfer.effectAllowed = 'move';
+                            btn.classList.add('opacity-50');
+                        });
+                        btn.addEventListener('dragend', () => {
+                            btn.classList.remove('opacity-50');
+                        });
+                        btn.addEventListener('dragover', (e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            const rect = btn.getBoundingClientRect();
+                            const offset = e.clientY - rect.top;
+                            // Visual Indicator
+                            ui.roomList.querySelectorAll('.border-t-2').forEach(el => el.classList.remove('border-t-2', 'border-indigo-500'));
+                            if (offset < rect.height / 2) {
+                                btn.style.borderTop = '2px solid #6366f1';
+                                btn.style.borderBottom = '';
+                            } else {
+                                btn.style.borderBottom = '2px solid #6366f1';
+                                btn.style.borderTop = '';
+                            }
+                        });
+                        btn.addEventListener('dragleave', () => {
+                            btn.style.borderTop = '';
+                            btn.style.borderBottom = '';
+                        });
+                        btn.addEventListener('drop', async (e) => {
+                            e.preventDefault();
+                            btn.style.borderTop = '';
+                            btn.style.borderBottom = '';
+
+                            const draggedId = e.dataTransfer.getData('text/plain');
+                            if (draggedId === id) return;
+
+                            const draggedBtn = ui.roomList.querySelector(`button[data-room-id="${draggedId}"]`);
+                            if (!draggedBtn) return;
+
+                            const rect = btn.getBoundingClientRect();
+                            const offset = e.clientY - rect.top;
+
+                            if (offset < rect.height / 2) {
+                                ui.roomList.insertBefore(draggedBtn, btn);
+                            } else {
+                                ui.roomList.insertBefore(draggedBtn, btn.nextSibling);
+                            }
+
+                            // --- Reorder Logic: Update Firestore ---
+                            const newOrder = [];
+                            ui.roomList.querySelectorAll('button[data-room-id]').forEach(b => newOrder.push(b.dataset.roomId));
+
+                            try {
+                                const newBatch = writeBatch(db);
+                                newOrder.forEach((rid, index) => {
+                                    newBatch.update(doc(db, "rooms", rid), { order: index });
+                                });
+                                await newBatch.commit();
+                                showToast("並び順を更新しました", "success");
+                            } catch (err) {
+                                console.error("Reorder failed:", err);
+                                showToast("並び替えに失敗しました", "error");
+                            }
+                        });
+                    }
+
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = "font-medium truncate";
+                    nameSpan.innerText = escapeHtml(room.name);
+                    btn.appendChild(nameSpan);
+
+                    if (isAdmin) {
+                        const actions = document.createElement('div');
+                        actions.className = "flex gap-2 ml-2 items-center";
+
+                        if (room.type === 'chat' || !room.type) {
+                            const commentIcon = document.createElement('span');
+                            commentIcon.className = "text-xs cursor-pointer opacity-70 hover:opacity-100 select-none";
+                            const canComment = room.canComment !== false;
+                            commentIcon.innerText = canComment ? "💬" : "🔇";
+                            commentIcon.title = canComment ? "コメント許可中" : "コメント禁止中";
+                            commentIcon.onclick = (e) => { e.stopPropagation(); toggleRoomCommentStatus(id, canComment); };
+                            actions.appendChild(commentIcon);
+                        }
+
+                        const statusIcon = document.createElement('span');
+                        statusIcon.className = "text-sm cursor-pointer opacity-70 hover:opacity-100 select-none px-1";
+                        statusIcon.innerText = room.isPublic ? "🌐" : "🔒";
+                        statusIcon.title = room.isPublic ? "公開中（全員が入室可）" : "非公開（管理人のみ）";
+                        statusIcon.onclick = (e) => {
+                            e.stopPropagation();
+                            toggleRoomStatus(id, room.isPublic);
+                        };
+
+                        const deleteIcon = document.createElement('span');
+                        deleteIcon.className = "text-xs cursor-pointer opacity-70 hover:opacity-100 hover:text-red-400 select-none";
+                        deleteIcon.innerText = "🗑️";
+                        deleteIcon.title = "ルームの削除";
+                        deleteIcon.onclick = (e) => {
+                            e.stopPropagation();
+                            window.showConfirm(`「${room.name}」を削除しますか？`, () => deleteRoom(id));
+                        };
+
+                        actions.appendChild(statusIcon);
+                        actions.appendChild(deleteIcon);
+                        btn.appendChild(actions);
+                    }
+                    btn.onclick = () => switchRoom(id);
+                    ui.roomList.appendChild(btn);
+                    if (id === lastRoomId) foundLastRoom = true;
+                });
+
+                updateSidebarStyles();
+                if (currentRoomId && allRoomsData[currentRoomId]) updateInputState(allRoomsData[currentRoomId]);
+
+                if (!currentRoomId && foundLastRoom) {
+                    switchRoom(lastRoomId);
+                }
+
+                if (needsCommit && isAdmin) {
+                    batch.commit().then(() => console.log("Migrated room order data"))
+                        .catch(e => console.error("Migration failed", e));
+                }
+            });
+        }
+
+        function updateSidebarStyles() {
+            const buttons = ui.roomList.querySelectorAll('button[data-room-id]');
+            buttons.forEach(btn => {
+                const id = btn.dataset.roomId;
+                if (id === currentRoomId) {
+                    btn.classList.remove('text-slate-300', 'hover:bg-slate-800');
+                    btn.classList.add('bg-indigo-600', 'text-white', 'shadow-md');
+                } else {
+                    btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-md');
+                    btn.classList.add('text-slate-300', 'hover:bg-slate-800');
+                }
+            });
+        }
+
+        function updateInputState(room) {
+            const canWrite = isAdmin || (room.canComment !== false);
+            if (canWrite) {
+                ui.messageInput.disabled = false;
+                ui.sendBtn.disabled = false;
+                ui.messageInput.placeholder = "メッセージを入力...";
+                ui.messageFormContainer.classList.replace('bg-gray-200', 'bg-gray-100');
+            } else {
+                ui.messageInput.disabled = true;
+                ui.sendBtn.disabled = true;
+                ui.messageInput.placeholder = "管理者により書き込みが制限されています";
+                ui.messageFormContainer.classList.replace('bg-gray-100', 'bg-gray-200');
+                ui.messageInput.value = "";
+                cancelReply();
+            }
+        }
+
+        async function switchRoom(roomId) {
+            cancelReply();
+            returnToMessageId = null;
+            ui.returnBtn.classList.add('hidden');
+            currentRoomId = roomId;
+            localStorage.setItem('lastRoomId', roomId);
+            updateAuthUI();
+
+            const roomData = allRoomsData[roomId];
+            if (!roomData) {
+                showToast("ルームが見つかりません", "error");
+                return;
+            }
+
+            ui.roomName.innerText = roomData.name;
+            ui.chatContainer.innerHTML = '<div id="loading-spinner" class="spinner"></div>';
+            updateSidebarStyles();
+            if (window.innerWidth < 768) toggleSidebar();
+            if (unsubscribeMessages) unsubscribeMessages();
+
+            const chatFooter = document.querySelector('footer');
+
+            // --- Download Button Visibility ---
+            if (roomData.type === 'survey_result' || !roomData.type || roomData.type === 'chat') {
+                ui.downloadBtn.classList.remove('hidden');
+            } else {
+                ui.downloadBtn.classList.add('hidden');
+            }
+
+            if (roomData.type === 'image') {
+                chatFooter.classList.add('hidden');
+
+                const urls = roomData.imageUrls || (roomData.imageUrl ? [roomData.imageUrl] : []);
+
+                ui.chatContainer.innerHTML = `
+                     <div class="h-full overflow-y-auto w-full">
+                         <div class="flex flex-wrap justify-center gap-6 p-4 pb-10">
+                            ${urls.map(url => `
+                                 <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden group w-full max-w-sm">
+                                     <div class="relative">
+                                        <img src="${escapeHtml(url)}" 
+                                             class="w-full h-auto object-contain hover:scale-105 transition duration-300 cursor-zoom-in" 
+                                             onclick="window.open('${escapeHtml(url)}', '_blank')"
+                                             loading="lazy">
+                                     </div>
+                                 </div>
+                            `).join('')}
+                         </div>
+                         ${urls.length === 0 ? '<div class="text-center text-gray-500 mt-20">画像が設定されていません</div>' : ''}
+                     </div>
+                `;
+
+            } else if (roomData.type === 'survey') {
+                chatFooter.classList.add('hidden');
+                renderSurvey(roomData);
+            } else if (roomData.type === 'survey_result') {
+                chatFooter.classList.add('hidden');
+                renderSurveyResults(roomData);
+            } else { // 'chat' or undefined
+                chatFooter.classList.remove('hidden');
+                updateInputState(roomData);
+                currentMessageLimit = 20;
+                loadMessages(roomId);
+            }
+        }
+
+        function renderSurvey(roomData) {
+            const container = ui.chatContainer;
+            container.innerHTML = '';
+
+            // --- Draft Logic: Load ---
+            const storageKey = `survey_draft_${currentRoomId}`;
+            let savedData = {};
+            try {
+                const saved = localStorage.getItem(storageKey);
+                if (saved) savedData = JSON.parse(saved);
+            } catch (e) {
+                console.error("Failed to load draft:", e);
+            }
+
+            const form = document.createElement('form');
+            form.className = 'p-8 space-y-8 max-w-2xl mx-auto bg-white rounded-lg shadow';
+
+            // --- Draft Logic: Save on Input ---
+            form.addEventListener('input', () => {
+                const fd = new FormData(form);
+                const draft = {};
+                for (const q of roomData.questions) {
+                    if (q.type === 'multi_selection') {
+                        draft[q.id] = fd.getAll(q.id);
+                    } else {
+                        draft[q.id] = fd.get(q.id);
+                    }
+                }
+                localStorage.setItem(storageKey, JSON.stringify(draft));
+            });
+
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(form);
+                const responses = {};
+                let allRequiredAnswered = true;
+
+                for (const q of roomData.questions) {
+                    if (!q.required) continue; // Skip validation for non-required questions
+
+                    let answer;
+                    if (q.type === 'multi_selection') {
+                        answer = formData.getAll(q.id);
+                        if (answer.length === 0) {
+                            allRequiredAnswered = false;
+                            break;
+                        }
+                    } else {
+                        answer = formData.get(q.id);
+                        if (!answer) {
+                            allRequiredAnswered = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (!allRequiredAnswered) {
+                    showToast("必須の質問にすべて回答してください", "info");
+                    return;
+                }
+
+                // Collect all answers (required and non-required)
+                for (const q of roomData.questions) {
+                    let answer;
+                    if (q.type === 'multi_selection') {
+                        answer = formData.getAll(q.id);
+                    } else {
+                        answer = formData.get(q.id);
+                    }
+                    if ((answer && answer.length > 0) || (typeof answer === 'string' && answer.trim() !== '')) {
+                        responses[q.id] = answer;
+                    }
+                }
+
+
+                window.showConfirm("この内容でアンケートを提出しますか？", async () => {
+                    try {
+                        const responseData = {
+                            roomId: currentRoomId,
+                            uid: currentUser.uid,
+                            clientId: myClientId,
+                            senderName: getDisplayName(),
+                            responses: responses,
+                            createdAt: serverTimestamp()
+                        };
+                        await addDoc(collection(db, "survey_responses"), responseData);
+                        showToast("回答を送信しました！", "success");
+
+                        // --- Draft Logic: Clear ---
+                        localStorage.removeItem(storageKey);
+
+                        container.innerHTML = `
+                            <div class="text-center p-10">
+                                <h2 class="text-2xl font-bold text-green-600 mb-4">ご協力ありがとうございました！</h2>
+                                <p class="text-gray-600">アンケートの回答を送信しました。</p>
+                            </div>
+                        `;
+                    } catch (err) {
+                        console.error(err);
+                        showToast("送信に失敗しました", "error");
+                    }
+                });
+            };
+
+            roomData.questions.forEach((q, index) => {
+                const questionBlock = document.createElement('fieldset');
+                questionBlock.className = 'border-t border-gray-200 pt-6 select-none';
+
+                const legend = document.createElement('legend');
+                legend.className = 'text-lg font-semibold text-gray-800 select-none';
+                legend.innerHTML = `質問 ${index + 1}: ${escapeHtml(q.text)} ${q.required ? '<span class="text-red-500 text-xs ml-2 font-medium">必須</span>' : ''}`;
+                questionBlock.appendChild(legend);
+
+                const inputContainer = document.createElement('div');
+                inputContainer.className = 'mt-4 space-y-3';
+
+                if ((q.type === 'selection' || q.type === 'multi_selection') && q.options.length === 0) {
+                    inputContainer.innerHTML = `<p class="text-sm text-gray-500">この質問には選択肢が設定されていません。</p>`;
+                } else {
+                    switch (q.type) {
+                        case 'input': {
+                            const input = document.createElement('input');
+                            input.type = 'text';
+                            input.name = q.id;
+                            input.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base py-2.5 px-3';
+                            input.required = q.required;
+                            if (savedData[q.id]) input.value = savedData[q.id];
+                            inputContainer.appendChild(input);
+                            break;
+                        }
+                        case 'input_long': {
+                            const textarea = document.createElement('textarea');
+                            textarea.name = q.id;
+                            textarea.rows = 4;
+                            textarea.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base px-3 py-2';
+                            textarea.required = q.required;
+                            if (savedData[q.id]) textarea.value = savedData[q.id];
+                            inputContainer.appendChild(textarea);
+                            break;
+                        }
+                        case 'selection': {
+                            inputContainer.setAttribute('role', 'radiogroup');
+                            q.options.forEach(opt => {
+                                const label = document.createElement('label');
+                                label.className = 'flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition select-none';
+                                const radio = document.createElement('input');
+                                radio.type = 'radio';
+                                radio.name = q.id;
+                                radio.value = opt;
+                                radio.required = q.required;
+                                radio.className = 'h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300';
+                                if (savedData[q.id] === opt) radio.checked = true;
+
+                                const span = document.createElement('span');
+                                span.textContent = opt;
+                                span.className = 'text-gray-700';
+                                label.appendChild(radio);
+                                label.appendChild(span);
+                                inputContainer.appendChild(label);
+                            });
+                            break;
+                        }
+                        case 'multi_selection': {
+                            q.options.forEach(opt => {
+                                const label = document.createElement('label');
+                                label.className = 'flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition select-none';
+                                const checkbox = document.createElement('input');
+                                checkbox.type = 'checkbox';
+                                checkbox.name = q.id;
+                                checkbox.value = opt;
+                                checkbox.className = 'h-4 w-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300';
+                                if (savedData[q.id] && savedData[q.id].includes(opt)) checkbox.checked = true;
+
+                                const span = document.createElement('span');
+                                span.textContent = opt;
+                                span.className = 'text-gray-700';
+                                label.appendChild(checkbox);
+                                label.appendChild(span);
+                                inputContainer.appendChild(label);
+                            });
+                            break;
+                        }
+                        case 'star': {
+                            const starContainer = document.createElement('div');
+                            starContainer.className = 'flex items-center justify-center gap-2';
+                            const hiddenInput = document.createElement('input');
+                            hiddenInput.type = 'hidden';
+                            hiddenInput.name = q.id;
+                            hiddenInput.required = q.required;
+                            if (savedData[q.id]) hiddenInput.value = savedData[q.id];
+                            inputContainer.appendChild(hiddenInput);
+
+                            for (let i = 1; i <= 5; i++) {
+                                const star = document.createElement('span');
+                                star.innerHTML = '&#9734;'; // empty star
+                                star.className = 'text-4xl text-gray-300 cursor-pointer transition-colors hover:text-yellow-400 select-none';
+                                star.dataset.value = i;
+                                if (hiddenInput.value && i <= parseInt(hiddenInput.value)) {
+                                    star.style.color = '#f59e0b';
+                                }
+                                starContainer.appendChild(star);
+                            }
+
+                            starContainer.addEventListener('mouseover', e => {
+                                if (e.target.tagName === 'SPAN' && e.target.dataset.value) {
+                                    const hoverValue = e.target.dataset.value;
+                                    const allStars = starContainer.querySelectorAll('span');
+                                    allStars.forEach(s => {
+                                        s.style.color = s.dataset.value <= hoverValue ? '#f59e0b' : '#d1d5db';
+                                    });
+                                }
+                            });
+
+                            starContainer.addEventListener('mouseout', () => {
+                                const currentValue = hiddenInput.value || 0;
+                                const allStars = starContainer.querySelectorAll('span');
+                                allStars.forEach(s => {
+                                    s.style.color = s.dataset.value <= currentValue ? '#f59e0b' : '#d1d5db';
+                                });
+                            });
+
+                            starContainer.addEventListener('click', e => {
+                                if (e.target.tagName === 'SPAN' && e.target.dataset.value) {
+                                    const value = e.target.dataset.value;
+                                    const currentValue = hiddenInput.value;
+                                    if (currentValue === value) {
+                                        hiddenInput.value = '';
+                                    } else {
+                                        hiddenInput.value = value;
+                                    }
+                                    const newCurrentValue = hiddenInput.value || 0;
+                                    const allStars = starContainer.querySelectorAll('span');
+                                    allStars.forEach(s => {
+                                        s.style.color = s.dataset.value <= newCurrentValue ? '#f59e0b' : '#d1d5db';
+                                    });
+                                    // Trigger validation & draft
+                                    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                            });
+                            inputContainer.appendChild(starContainer);
+                            break;
+                        }
+                        default:
+                            inputContainer.innerHTML = `<p class="text-sm text-red-500">未対応の質問タイプです: ${escapeHtml(q.type)}</p>`;
+                    }
+                }
+
+                questionBlock.appendChild(inputContainer);
+                form.appendChild(questionBlock);
+            });
+
+            const submitButton = document.createElement('button');
+            submitButton.type = 'submit';
+            submitButton.className = 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition';
+            submitButton.textContent = 'この内容で提出する';
+            form.appendChild(submitButton);
+
+            container.appendChild(form);
+        }
+
+        async function renderSurveyResults(roomData) {
+            const container = ui.chatContainer;
+            container.innerHTML = '<div id="loading-spinner" class="spinner"></div>';
+
+            try {
+                // 1. Get the original survey questions
+                const sourceSurveyRef = doc(db, "rooms", roomData.sourceSurveyId);
+                const sourceSurveySnap = await getDoc(sourceSurveyRef);
+                if (!sourceSurveySnap.exists()) {
+                    throw new Error("元のアンケートが見つかりません。");
+                }
+                const questions = sourceSurveySnap.data().questions;
+
+                // 2. Fetch all responses for the survey
+                const q = query(collection(db, "survey_responses"), where("roomId", "==", roomData.sourceSurveyId), orderBy("createdAt", "desc"));
+                const querySnapshot = await getDocs(q);
+                const responses = querySnapshot.docs.map(doc => doc.data());
+
+                // 3. Render the tab structure
+                container.innerHTML = ''; // Clear spinner
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'p-4 md:p-8';
+
+                const header = document.createElement('h2');
+                header.className = 'text-2xl font-bold text-gray-800 mb-6';
+                header.innerText = `「${escapeHtml(sourceSurveySnap.data().name)}」の集計結果`;
+                wrapper.appendChild(header);
+
+                // Tab buttons
+                const tabContainer = document.createElement('div');
+                tabContainer.className = 'border-b border-gray-200 mb-6';
+                tabContainer.innerHTML = `
+                    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                        <button id="tab-btn-summary" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">集計結果</button>
+                        <button id="tab-btn-graph" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">グラフ</button>
+                    </nav>
+                `;
+                wrapper.appendChild(tabContainer);
+
+                // Tab content panes
+                const summaryPane = document.createElement('div');
+                summaryPane.id = 'tab-pane-summary';
+
+                const graphPane = document.createElement('div');
+                graphPane.id = 'tab-pane-graph';
+                graphPane.className = 'hidden';
+
+                wrapper.appendChild(summaryPane);
+                wrapper.appendChild(graphPane);
+                container.appendChild(wrapper);
+
+                // Render content into panes
+                if (responses.length === 0) {
+                    summaryPane.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">まだ回答がありません</div>';
+                    graphPane.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">まだ回答がありません</div>';
+                } else {
+                    renderResultsTable(summaryPane, questions, responses);
+                    renderGraphs(graphPane, questions, responses);
+                }
+
+                // Tab switching logic
+                const summaryBtn = document.getElementById('tab-btn-summary');
+                const graphBtn = document.getElementById('tab-btn-graph');
+
+                summaryBtn.addEventListener('click', () => {
+                    summaryPane.classList.remove('hidden');
+                    graphPane.classList.add('hidden');
+                    summaryBtn.className = 'border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm';
+                    graphBtn.className = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm';
+                });
+
+                graphBtn.addEventListener('click', () => {
+                    graphPane.classList.remove('hidden');
+                    summaryPane.classList.add('hidden');
+                    graphBtn.className = 'border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm';
+                    summaryBtn.className = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm';
+                });
+
+            } catch (error) {
+                console.error("結果の表示に失敗:", error);
+                container.innerHTML = `<div class="p-4 text-red-500">エラー: ${error.message}</div>`;
+                showToast(error.message, "error");
+            }
+        }
+
+        function renderResultsTable(container, questions, responses) {
+            // --- PC View (Table) ---
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'hidden md:block overflow-x-auto bg-white rounded-lg shadow';
+
+            const table = document.createElement('table');
+            table.className = 'min-w-full divide-y divide-gray-200';
+
+            const thead = document.createElement('thead');
+            thead.className = 'bg-gray-50';
+            const headerRow = document.createElement('tr');
+
+            const staticHeaders = ['回答日時', '回答者'];
+            staticHeaders.forEach(text => {
+                const th = document.createElement('th');
+                th.scope = 'col';
+                th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+                th.innerText = text;
+                headerRow.appendChild(th);
+            });
+
+            questions.forEach(q => {
+                const th = document.createElement('th');
+                th.scope = 'col';
+                th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+                th.innerText = escapeHtml(q.text);
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+            tbody.className = 'bg-white divide-y divide-gray-200';
+
+            responses.forEach(res => {
+                const tr = document.createElement('tr');
+
+                const timeTd = document.createElement('td');
+                timeTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+                timeTd.innerText = res.createdAt ? formatTime(res.createdAt) : 'N/A';
+                tr.appendChild(timeTd);
+
+                const senderTd = document.createElement('td');
+                senderTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium';
+                senderTd.innerText = res.senderName || `ID: ${res.uid.slice(0, 6)}`;
+                tr.appendChild(senderTd);
+
+                questions.forEach(q => {
+                    const answerTd = document.createElement('td');
+                    answerTd.className = 'px-6 py-4 text-sm text-gray-600';
+                    const answer = res.responses[q.id];
+                    if (Array.isArray(answer)) {
+                        answerTd.innerText = answer.join(', ');
+                    } else {
+                        answerTd.innerText = answer || '';
+                    }
+                    tr.appendChild(answerTd);
+                });
+
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            tableContainer.appendChild(table);
+            container.appendChild(tableContainer);
+
+            // --- Mobile View (Cards) ---
+            const mobileContainer = document.createElement('div');
+            mobileContainer.className = 'md:hidden space-y-4';
+
+            responses.forEach(res => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded-lg shadow border border-gray-100';
+
+                // Header
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-center mb-3 pb-2 border-b border-gray-100';
+
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'text-xs text-gray-500';
+                timeSpan.innerText = res.createdAt ? formatTime(res.createdAt) : 'N/A';
+
+                const senderSpan = document.createElement('span');
+                senderSpan.className = 'text-xs font-medium text-gray-700';
+                senderSpan.innerText = res.senderName || `ID: ${res.uid.slice(0, 6)}`;
+
+                header.appendChild(timeSpan);
+                header.appendChild(senderSpan);
+                card.appendChild(header);
+
+                // Content
+                const content = document.createElement('div');
+                content.className = 'space-y-3';
+
+                questions.forEach(q => {
+                    const item = document.createElement('div');
+
+                    const qTitle = document.createElement('p');
+                    qTitle.className = 'text-[10px] uppercase tracking-wide text-gray-400 font-bold mb-0.5';
+                    qTitle.innerText = q.text;
+
+                    const aText = document.createElement('p');
+                    aText.className = 'text-sm text-gray-800 break-words';
+                    const answer = res.responses[q.id];
+                    if (Array.isArray(answer)) {
+                        aText.innerText = answer.join(', ');
+                    } else {
+                        aText.innerText = answer || '（回答なし）';
+                    }
+
+                    item.appendChild(qTitle);
+                    item.appendChild(aText);
+                    content.appendChild(item);
+                });
+                card.appendChild(content);
+                mobileContainer.appendChild(card);
+            });
+            container.appendChild(mobileContainer);
+        }
+
+        function renderGraphs(container, questions, responses) {
+            container.innerHTML = '';
+
+            const grid = document.createElement('div');
+            grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
+
+            questions.forEach(q => {
+                if (q.type !== 'star' && q.type !== 'selection' && q.type !== 'multi_selection') {
+                    return;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'bg-white p-6 rounded-lg shadow';
+
+                const title = document.createElement('h3');
+                title.className = 'text-base font-medium text-gray-800 mb-4';
+                title.innerText = q.text;
+                card.appendChild(title);
+
+                if (q.type === 'star') {
+                    const allScores = responses.map(r => r.responses[q.id]).filter(Boolean).map(Number);
+                    if (allScores.length > 0) {
+                        const avg = allScores.reduce((a, b) => a + b, 0) / allScores.length;
+                        const percent = (avg / 5) * 100;
+
+                        const avgEl = document.createElement('div');
+                        avgEl.className = 'text-center py-4';
+
+                        const starOverlay = `
+                            <div class="relative inline-block text-3xl tracking-widest" title="${avg.toFixed(2)} / 5.0">
+                                <div class="text-gray-200">★★★★★</div>
+                                <div class="absolute top-0 left-0 overflow-hidden text-amber-500 whitespace-nowrap" style="width: ${percent}%">★★★★★</div>
+                            </div>
+                        `;
+
+                        avgEl.innerHTML = `
+                            <div class="text-4xl font-bold text-gray-800 mb-1">${avg.toFixed(2)}</div>
+                            ${starOverlay}
+                            <div class="text-xs text-gray-500 mt-2">平均 (${allScores.length}件の回答)</div>
+                        `;
+                        card.appendChild(avgEl);
+                    } else {
+                        card.innerHTML += '<p class="text-sm text-gray-400">まだ回答がありません。</p>';
+                    }
+                    grid.appendChild(card);
+                }
+
+                if (q.type === 'selection') {
+                    const answerCounts = {};
+                    q.options.forEach(opt => { answerCounts[opt] = 0; });
+
+                    let totalAnswers = 0;
+                    responses.forEach(r => {
+                        const answer = r.responses[q.id];
+                        if (answer && answerCounts.hasOwnProperty(answer)) {
+                            answerCounts[answer]++;
+                            totalAnswers++;
+                        }
+                    });
+
+                    if (totalAnswers > 0) {
+                        const canvasContainer = document.createElement('div');
+                        canvasContainer.className = 'relative h-64 w-full';
+                        const canvas = document.createElement('canvas');
+                        canvasContainer.appendChild(canvas);
+                        card.appendChild(canvasContainer);
+
+                        new Chart(canvas, {
+                            type: 'pie',
+                            data: {
+                                labels: Object.keys(answerCounts),
+                                datasets: [{
+                                    data: Object.values(answerCounts),
+                                    backgroundColor: ['#6366F1', '#EC4899', '#22C55E', '#F59E0B', '#3B82F6', '#D946EF', '#10B981', '#EAB308'],
+                                    hoverOffset: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'top' },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function (context) {
+                                                let label = context.label || '';
+                                                if (label) { label += ': '; }
+                                                const value = context.parsed;
+                                                const percentage = ((value / totalAnswers) * 100).toFixed(1) + '%';
+                                                label += `${value}件 (${percentage})`;
+                                                return label;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        card.innerHTML += '<p class="text-sm text-gray-400">まだ回答がありません。</p>';
+                    }
+                    grid.appendChild(card);
+                }
+
+                if (q.type === 'multi_selection') {
+                    const answerCounts = {};
+                    q.options.forEach(opt => { answerCounts[opt] = 0; });
+
+                    let totalAnswers = 0;
+                    responses.forEach(r => {
+                        const answers = r.responses[q.id];
+                        if (Array.isArray(answers)) {
+                            answers.forEach(ans => {
+                                if (answerCounts.hasOwnProperty(ans)) {
+                                    answerCounts[ans]++;
+                                    totalAnswers++;
+                                }
+                            });
+                        }
+                    });
+
+                    if (totalAnswers > 0) {
+                        const canvasContainer = document.createElement('div');
+                        canvasContainer.className = 'relative h-64 w-full';
+                        const canvas = document.createElement('canvas');
+                        canvasContainer.appendChild(canvas);
+                        card.appendChild(canvasContainer);
+
+                        new Chart(canvas, {
+                            type: 'bar',
+                            data: {
+                                labels: Object.keys(answerCounts),
+                                datasets: [{
+                                    label: '回答数',
+                                    data: Object.values(answerCounts),
+                                    backgroundColor: '#3B82F6',
+                                    borderRadius: 4
+                                }]
+                            },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function (context) {
+                                                const value = context.parsed.x;
+                                                return `${value}件`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        beginAtZero: true,
+                                        ticks: { stepSize: 1 }
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        card.innerHTML += '<p class="text-sm text-gray-400">まだ回答がありません。</p>';
+                    }
+                    grid.appendChild(card);
+                }
+            });
+
+            if (grid.children.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">グラフで表示できる質問タイプ（星評価・選択式）がありません。</div>';
+            } else {
+                container.appendChild(grid);
+            }
+        }
+
+        function loadMessages(roomId, onLoadComplete) {
+            const q = query(
+                collection(db, "messages"),
+                where("roomId", "==", roomId),
+                orderBy("createdAt", "asc"),
+                limitToLast(currentMessageLimit)
+            );
+
+            let isInitialLoad = true;
+
+            if (unsubscribeMessages) unsubscribeMessages();
+
+            unsubscribeMessages = onSnapshot(q, (snapshot) => {
+                const loading = document.getElementById('loading-msg');
+                if (loading) loading.remove();
+
+                if (snapshot.empty && ui.chatContainer.children.length <= 1) {
+                    if (ui.chatContainer.querySelectorAll('[id^="row-"]').length === 0) {
+                        ui.chatContainer.innerHTML = '<div id="loading-spinner" class="spinner hidden"></div><div id="empty-msg" class="text-center text-gray-400 mt-10 text-sm">まだメッセージはありません</div>';
+                    }
+                } else {
+                    const empty = document.getElementById('empty-msg');
+                    if (empty) empty.remove();
+                }
+
+                const changes = snapshot.docChanges();
+                let shouldScrollToBottom = false;
+                const threshold = 100;
+                const isNearBottom = ui.chatContainer.scrollHeight - ui.chatContainer.scrollTop - ui.chatContainer.clientHeight < threshold;
+
+                changes.forEach((change) => {
+                    const msg = change.doc.data();
+                    const id = change.doc.id;
+                    if (change.type === "added") {
+                        if (!document.getElementById(`row-${id}`)) {
+                            insertMessageSorted(id, msg);
+
+                            const isMine = (currentUser && msg.uid === currentUser.uid) || (msg.clientId && msg.clientId === myClientId);
+                            if (isMine) shouldScrollToBottom = true;
+                            else if (isNearBottom) shouldScrollToBottom = true;
+
+                            if (!isInitialLoad && !isNearBottom && !isMine && !isLoadingHistory) {
+                                unreadCount++;
+                                updateBadgeUI();
+                            }
+                        }
+                    }
+                    if (change.type === "modified") updateMessage(id, msg);
+                    if (change.type === "removed") { const el = document.getElementById(`row-${id}`); if (el) el.remove(); }
+                });
+
+                // 修正: 履歴ロード時のスクロール位置ロジック強化
+                if (isInitialLoad) {
+                    isInitialLoad = false;
+                    if (!isLoadingHistory) {
+                        setTimeout(() => { ui.chatContainer.scrollTop = ui.chatContainer.scrollHeight; }, 0);
+                    }
+                    if (onLoadComplete) onLoadComplete();
+                } else if (shouldScrollToBottom && !isLoadingHistory) {
+                    setTimeout(() => { ui.chatContainer.scrollTop = ui.chatContainer.scrollHeight; }, 10);
+                }
+            }, (error) => {
+                if (error.code === 'failed-precondition') {
+                    console.error("【重要】インデックスが必要です。このURLを開いて作成してください:", error.message);
+                    showToast("設定が必要です(F12コンソール参照)", "error");
+                } else {
+                    console.error(error);
+                }
+            });
+        }
+
+        function insertMessageSorted(id, msg) {
+            const rowDiv = createMessageElement(id, msg);
+            const msgTime = msg.createdAt ? msg.createdAt.toDate().getTime() : Date.now();
+
+            const children = Array.from(ui.chatContainer.children).filter(c => c.id.startsWith('row-'));
+
+            if (children.length === 0) {
+                ui.chatContainer.appendChild(rowDiv);
+                return;
+            }
+
+            let inserted = false;
+            for (let i = children.length - 1; i >= 0; i--) {
+                const child = children[i];
+                const childTimeStr = child.dataset.timestamp;
+                const childTime = childTimeStr ? parseInt(childTimeStr) : 0;
+
+                if (msgTime >= childTime) {
+                    if (i === children.length - 1) {
+                        ui.chatContainer.appendChild(rowDiv);
+                    } else {
+                        ui.chatContainer.insertBefore(rowDiv, children[i + 1]);
+                    }
+                    inserted = true;
+                    break;
+                }
+            }
+
+            if (!inserted) {
+                const firstMsg = ui.chatContainer.querySelector('[id^="row-"]');
+                if (firstMsg) {
+                    ui.chatContainer.insertBefore(rowDiv, firstMsg);
+                } else {
+                    ui.chatContainer.appendChild(rowDiv);
+                }
+            }
+        }
+
+        function createMessageElement(id, msg) {
+            const isMyMessage = (msg.uid === currentUser.uid) || (msg.clientId && msg.clientId === myClientId);
+            const isMsgAdmin = msg.isAdmin === true;
+
+            const rowDiv = document.createElement('div');
+            rowDiv.id = `row-${id}`;
+            rowDiv.dataset.timestamp = msg.createdAt ? msg.createdAt.toDate().getTime() : Date.now();
+            rowDiv.className = `flex w-full pop-in gap-2 mb-6 ${isMyMessage ? 'justify-end' : 'justify-start'}`;
+
+            if (!isMyMessage) {
+                const avatar = document.createElement('div');
+                if (isMsgAdmin) {
+                    avatar.className = "w-10 h-10 rounded-full bg-amber-500 text-white flex-shrink-0 flex items-center justify-center text-[10px] font-bold shadow-md ring-2 ring-amber-200 select-none";
+                    avatar.innerText = "Admin";
+                } else {
+                    avatar.className = "w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center text-xs text-gray-500 select-none";
+                    avatar.innerText = "User";
+                }
+                rowDiv.appendChild(avatar);
+            }
+
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = `flex flex-col ${isMyMessage ? 'items-end' : 'items-start'} max-w-[85%]`;
+
+            const infoRow = document.createElement('div');
+            infoRow.className = "flex items-baseline gap-2 mb-1 px-1";
+
+            const nameLabel = document.createElement('span');
+            nameLabel.className = "text-[10px] text-gray-400";
+            let displayNameText = escapeHtml(msg.senderName) || `ID: ${msg.uid.slice(0, 8)}`;
+            let labelHtml = "";
+            if (isMsgAdmin) labelHtml += `<span class="text-amber-500 font-bold mr-1">[Admin]</span>`;
+            if (msg.senderLabel) labelHtml += `<span class="text-green-600 font-medium mr-1">[${escapeHtml(msg.senderLabel)}]</span>`;
+            nameLabel.innerHTML = `${labelHtml} ${displayNameText}`;
+
+            const timeLabel = document.createElement('span');
+            timeLabel.className = "text-[9px] text-gray-300 select-none";
+            if (msg.createdAt) timeLabel.innerText = formatTime(msg.createdAt);
+            else timeLabel.innerText = formatTime(null);
+
+            if (isMyMessage) {
+                infoRow.appendChild(timeLabel);
+                infoRow.appendChild(nameLabel);
+            } else {
+                infoRow.appendChild(nameLabel);
+                infoRow.appendChild(timeLabel);
+            }
+            contentWrapper.appendChild(infoRow);
+
+            const bubble = document.createElement('div');
+            bubble.id = `bubble-${id}`;
+            let bubbleClass = "px-4 py-2.5 shadow-sm text-[15px] leading-relaxed w-fit max-w-full break-words whitespace-pre-wrap rounded-[18px] ";
+            if (isMsgAdmin) {
+                if (isMyMessage) bubbleClass += "bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-br-none shadow-orange-200";
+                else bubbleClass += "bg-amber-50 border border-amber-200 text-amber-900 rounded-bl-none shadow-amber-100";
+            } else if (isMyMessage) bubbleClass += "bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-br-none";
+            else bubbleClass += "bg-white text-gray-800 border border-gray-100 rounded-bl-none";
+            bubbleClass += " select-text";
+            bubble.className = bubbleClass;
+
+            if (msg.replyToId && msg.replyToText) {
+                const quoteDiv = document.createElement('div');
+                quoteDiv.className = "reply-quote select-none";
+                quoteDiv.title = "元のメッセージを表示";
+                quoteDiv.innerHTML = `<b>${escapeHtml(msg.replyToName)}</b>: ${escapeHtml(msg.replyToText)}`;
+                quoteDiv.onclick = (e) => {
+                    e.stopPropagation();
+                    handleQuoteClick(msg.replyToId, id);
+                };
+                bubble.appendChild(quoteDiv);
+            }
+
+            bubble.appendChild(createContentWithLinks(msg.text));
+            contentWrapper.appendChild(bubble);
+
+            // 修正: ボタンエリアの余白拡大とタッチ領域改善
+            const reactionArea = document.createElement('div');
+            reactionArea.className = "mt-2 flex items-center gap-3 select-none";
+
+            const likeBtn = document.createElement('button');
+            likeBtn.id = `like-btn-${id}`;
+            const hasLikes = (msg.likes || 0) > 0;
+            likeBtn.className = `flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-90 ${hasLikes ? 'bg-pink-50 text-pink-600' : 'text-gray-400 hover:bg-gray-100'}`;
+            likeBtn.innerHTML = `<span class="${hasLikes ? 'text-lg leading-none' : 'text-base leading-none'}">${hasLikes ? '♥' : '♡'}</span><span id="like-count-${id}">${msg.likes || 0}</span>`;
+            likeBtn.onclick = async () => {
+                likeBtn.firstElementChild.classList.add('like-bounce');
+                try { await updateDoc(doc(db, "messages", id), { likes: increment(1) }); } catch (e) { }
+                setTimeout(() => likeBtn.firstElementChild.classList.remove('like-bounce'), 300);
+            };
+            reactionArea.appendChild(likeBtn);
+
+            const room = allRoomsData[currentRoomId];
+            const isRestricted = room && room.canComment === false;
+            const canEdit = isAdmin || (isMyMessage && !isRestricted && !isMsgAdmin);
+
+            if (isAdmin || (room && room.canComment !== false)) {
+                const replyBtn = document.createElement('button');
+                replyBtn.className = "text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors p-2 rounded-full";
+                replyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>`;
+                replyBtn.title = "返信";
+                replyBtn.setAttribute('aria-label', '返信');
+                const senderName = msg.senderName || (isMsgAdmin ? "Admin" : "User");
+                replyBtn.onclick = () => window.startReply(id, msg.text, senderName);
+                reactionArea.appendChild(replyBtn);
+            }
+
+            if (canEdit) {
+                const editBtn = document.createElement('button');
+                editBtn.className = "text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors p-2 rounded-full";
+                editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3L10.58 12.42a4 4 0 01-1.343.834l-3.155 1.262a.5.5 0 01-.65-.65z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0010 3H4.75A2.75 2.75 0 002 5.75v9.5A2.75 2.75 0 004.75 18h9.5A2.75 2.75 0 0017 15.25V10a.75.75 0 00-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5z" /></svg>`;
+                editBtn.onclick = () => window.startEdit(id, `bubble-${id}`, isMsgAdmin);
+                reactionArea.appendChild(editBtn);
+            }
+
+            if (isAdmin || (isMyMessage && !isRestricted)) {
+                const delBtn = document.createElement('button');
+                delBtn.className = "text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors p-2 rounded-full ml-1";
+                delBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.5 7.5a.75.75 0 101.5-.06l-.5-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.5 7.5a.75.75 0 101.5.06l.5-7.5z" clip-rule="evenodd" /></svg>`;
+                delBtn.onclick = () => window.showConfirm("メッセージを削除しますか？", () => window.deleteMessage(id));
+                reactionArea.appendChild(delBtn);
+            }
+
+            contentWrapper.appendChild(reactionArea);
+            rowDiv.appendChild(contentWrapper);
+            return rowDiv;
+        }
+
+        // 旧appendMessageのラッパー
+        function appendMessage(id, msg) {
+            insertMessageSorted(id, msg);
+        }
+
+        function updateMessage(id, msg) {
+            const bubble = document.getElementById(`bubble-${id}`);
+            if (bubble && !bubble.querySelector('textarea')) {
+                bubble.innerHTML = '';
+                if (msg.replyToId && msg.replyToText) {
+                    const quoteDiv = document.createElement('div');
+                    quoteDiv.className = "reply-quote select-none";
+                    quoteDiv.title = "元のメッセージを表示";
+                    quoteDiv.innerHTML = `<b>${escapeHtml(msg.replyToName)}</b>: ${escapeHtml(msg.replyToText)}`;
+                    quoteDiv.onclick = (e) => {
+                        e.stopPropagation();
+                        handleQuoteClick(msg.replyToId, id);
+                    };
+                    bubble.appendChild(quoteDiv);
+                }
+                bubble.appendChild(createContentWithLinks(msg.text));
+            }
+
+            const likeCount = document.getElementById(`like-count-${id}`);
+            if (likeCount) likeCount.innerText = msg.likes || 0;
+            const likeBtn = document.getElementById(`like-btn-${id}`);
+            if (likeBtn) {
+                const hasLikes = (msg.likes || 0) > 0;
+                likeBtn.className = `flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-90 ${hasLikes ? 'bg-pink-50 text-pink-600' : 'text-gray-400 hover:bg-gray-100'}`;
+                likeBtn.firstElementChild.innerHTML = hasLikes ? '♥' : '♡';
+                likeBtn.firstElementChild.className = hasLikes ? 'text-lg leading-none' : 'text-base leading-none';
+            }
+        }
+
+        // ==========================================================================================
+        //  Application Layer
+        //  (User Actions & Handlers)
+        // ==========================================================================================
+        window.handleLogin = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('password').value;
+            try { await signInWithEmailAndPassword(auth, email, pass); document.getElementById('login-modal').close(); showToast("ログインしました", "success"); }
+            catch (error) { showToast("ログイン失敗: " + error.message, "error"); }
+        };
+
+        window.handleCreateRoom = async (e) => {
+            e.preventDefault();
+            if (!isAdmin) return;
+
+            const modal = document.getElementById('create-room-modal');
+            const submitBtn = modal.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-sm"></span> 作成中...';
+
+            const name = document.getElementById('new-room-name').value;
+            const type = document.getElementById('new-room-type').value;
+            const file = document.getElementById('room-file-input').files[0];
+
+            try {
+                let roomData = {
+                    name,
+                    type,
+                    createdAt: serverTimestamp(),
+                    createdBy: currentUser.uid,
+                    order: Date.now()
+                };
+
+                if (type === 'chat') {
+                    roomData.isPublic = document.getElementById('new-room-public').checked;
+                    roomData.canComment = document.getElementById('new-room-comment').checked;
+                } else if (type === 'image') {
+                    const val = document.getElementById('room-image-url-input').value;
+                    if (!val || !val.trim()) throw new Error("画像URLが入力されていません。");
+
+                    const urls = val.split(/[\n,]/).map(u => u.trim()).filter(u => u);
+                    if (urls.length === 0) throw new Error("画像URLが入力されていません。");
+
+                    urls.forEach(u => {
+                        try {
+                            new URL(u);
+                        } catch (_) {
+                            throw new Error("無効なURLが含まれています: " + u);
+                        }
+                    });
+
+                    roomData.imageUrls = urls;
+                    roomData.imageUrl = urls[0]; // Legacy support
+                    roomData.isPublic = true;
+                } else if (type === 'survey') {
+                    if (!file) throw new Error("CSVファイルが選択されていません。");
+                    roomData.questions = await parseCsv(file);
+                    roomData.isPublic = true;
+                }
+
+                const docRef = await addDoc(collection(db, "rooms"), roomData);
+
+                if (type === 'survey') {
+                    const resultsRoomData = {
+                        name: `[集計] ${name}`,
+                        type: 'survey_result',
+                        sourceSurveyId: docRef.id,
+                        createdAt: serverTimestamp(),
+                        createdBy: currentUser.uid,
+                        isPublic: false,
+                        canComment: false
+                    };
+                    await addDoc(collection(db, "rooms"), resultsRoomData);
+                }
+
+                modal.close();
+                showToast("ルームを作成しました", "success");
+
+            } catch (error) {
+                console.error("ルーム作成エラー:", error);
+                showToast(error.message || "作成に失敗しました", "error");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+            }
+        };
+
+        function parseCsv(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const sheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[sheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                        // CSVから質問形式に変換
+                        const questions = json.map((row, index) => {
+                            if (!row || row.length < 3 || !row[0] || !row[1] || !row[2]) {
+                                return null; // Skip invalid rows
+                            }
+                            return {
+                                id: `q${index}`,
+                                type: row[0],
+                                required: row[1].toUpperCase() === 'R',
+                                text: row[2],
+                                options: row.slice(3).filter(opt => opt) // Options start from the 4th column
+                            };
+                        }).filter(q => q); // Filter out null rows
+
+                        if (questions.length === 0) {
+                            reject(new Error("CSVのフォーマットが正しくないか、内容が空です。1列目に質問タイプ, 2列目に必須(R/NR), 3列目に質問文を配置してください。"));
+                        } else {
+                            resolve(questions);
+                        }
+                    } catch (csvError) {
+                        console.error(csvError);
+                        reject(new Error("CSVファイルの読み込みに失敗しました。"));
+                    }
+                };
+                reader.onerror = () => reject(new Error("ファイル読み込みエラー"));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+
+        window.toggleRoomStatus = async (roomId, currentStatus) => { try { await updateDoc(doc(db, "rooms", roomId), { isPublic: !currentStatus }); } catch (e) { } };
+        window.toggleRoomCommentStatus = async (roomId, currentStatus) => { try { await updateDoc(doc(db, "rooms", roomId), { canComment: !currentStatus }); } catch (e) { } };
+
+        window.deleteMessage = async (id) => {
+            try {
+                await deleteDoc(doc(db, "messages", id));
+                showToast("メッセージを削除しました", "success");
+            } catch (e) {
+                console.error(e);
+                showToast("削除に失敗しました", "error");
+            }
+        };
+
+        window.deleteRoom = async (roomId) => { try { await deleteDoc(doc(db, "rooms", roomId)); if (currentRoomId === roomId) { currentRoomId = null; ui.chatContainer.innerHTML = '<div class="text-center text-gray-400 mt-10 text-sm">ルームが削除されました</div>'; ui.roomName.innerText = "ルームを選択"; ui.messageInput.disabled = true; updateSidebarStyles(); showToast("ルームを削除しました", "success"); } } catch (e) { } };
+
+        async function sendMessage() {
+            const text = ui.messageInput.value.trim();
+            if (!text || !currentUser || !currentRoomId) return;
+            try {
+                ui.messageInput.value = '';
+                ui.messageInput.style.height = 'auto';
+
+                const docData = {
+                    text: text,
+                    uid: currentUser.uid,
+                    clientId: isAdmin ? null : myClientId,
+                    senderName: getDisplayName() || null,
+                    senderLabel: mySelectedLabel || null,
+                    roomId: currentRoomId,
+                    createdAt: serverTimestamp(),
+                    likes: 0,
+                    isAdmin: isAdmin
+                };
+
+                if (replyingTo) {
+                    docData.replyToId = replyingTo.id;
+                    docData.replyToText = replyingTo.text;
+                    docData.replyToName = replyingTo.name;
+                    cancelReply();
+                }
+
+                await addDoc(collection(db, "messages"), docData);
+            } catch (error) { console.error("送信エラー:", error); showToast("送信できませんでした", "error"); }
+        }
+
+        document.getElementById('send-btn').addEventListener('click', (e) => { e.preventDefault(); sendMessage(); });
+
+        window.handleDownload = async () => {
+            if (!currentRoomId) { showToast("ルームを選択してください", "error"); return; }
+
+            const room = allRoomsData[currentRoomId];
+            if (!room) return;
+
+            if (room.type === 'survey_result') {
+                window.showConfirm("アンケート結果をCSV形式でダウンロードしますか？", async () => {
+                    try {
+                        const originalSurveyRef = doc(db, "rooms", room.sourceSurveyId);
+                        const originalSurveySnap = await getDoc(originalSurveyRef);
+                        if (!originalSurveySnap.exists()) throw new Error("元のアンケートデータが見つかりません");
+
+                        const questions = originalSurveySnap.data().questions;
+                        const q = query(collection(db, "survey_responses"), where("roomId", "==", room.sourceSurveyId), orderBy("createdAt", "desc"));
+                        const querySnapshot = await getDocs(q);
+
+                        const data = querySnapshot.docs.map(doc => {
+                            const d = doc.data();
+                            const row = {
+                                "回答日時": d.createdAt ? d.createdAt.toDate().toLocaleString('ja-JP') : "",
+                                "回答者": d.senderName || d.uid,
+                            };
+                            questions.forEach(q => {
+                                const ans = d.responses[q.id];
+                                row[q.text] = Array.isArray(ans) ? ans.join(", ") : (ans || "");
+                            });
+                            return row;
+                        });
+
+                        const wb = XLSX.utils.book_new();
+                        const ws = XLSX.utils.json_to_sheet(data);
+                        XLSX.utils.book_append_sheet(wb, ws, "アンケート結果");
+                        XLSX.writeFile(wb, `survey_results_${room.name}_${new Date().toISOString().slice(0, 10)}.csv`);
+                        showToast("ダウンロードを開始しました", "success");
+
+                    } catch (error) {
+                        console.error(error);
+                        showToast("ダウンロード失敗: " + error.message, "error");
+                    }
+                });
+                return;
+            }
+
+            // Chat Download
+            window.showConfirm("このルームの履歴をダウンロードしますか？", async () => {
+                try {
+                    const q = query(collection(db, "messages"), where("roomId", "==", currentRoomId), orderBy("createdAt", "asc"));
+                    const querySnapshot = await getDocs(q);
+                    const data = querySnapshot.docs.map(doc => {
+                        const d = doc.data();
+                        let dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString('ja-JP') : "";
+                        const userType = d.isAdmin ? "管理者" : "ゲスト";
+                        const sender = d.senderName ? `${d.senderName} (${d.uid})` : d.uid;
+                        const label = d.senderLabel ? `[${d.senderLabel}]` : "";
+                        let msgContent = d.text;
+                        if (d.replyToText) msgContent = `【${d.replyToName}への返信: ${d.replyToText}】\n` + msgContent;
+                        return { "日時": dateStr, "ユーザー": userType, "名前/ID": sender, "バッジ": label, "メッセージ": msgContent, "いいね数": d.likes || 0 };
+                    });
+                    const wb = XLSX.utils.book_new();
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    ws['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 30 }, { wch: 15 }, { wch: 50 }, { wch: 10 }];
+                    XLSX.utils.book_append_sheet(wb, ws, "チャット履歴");
+                    XLSX.writeFile(wb, `chat_${ui.roomName.innerText}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                    showToast("ダウンロードを開始しました", "success");
+                } catch (error) { console.error(error); showToast("ダウンロード失敗", "error"); }
+            });
+        };
+
+        window.toggleSidebar = () => { ui.sidebar.classList.toggle('-translate-x-full'); ui.overlay.classList.toggle('hidden'); };
+        window.openLoginModal = () => document.getElementById('login-modal').showModal();
+
+        // create-room-modal のロジック
+        const roomTypeSelector = document.getElementById('room-type-selector');
+        const roomTypeInput = document.getElementById('new-room-type');
+        const fileUploadSection = document.getElementById('file-upload-section');
+        const fileUploadInput = document.getElementById('room-file-input');
+        const fileUploadLabel = document.getElementById('file-upload-label');
+        const fileUploadInfo = document.getElementById('file-upload-info');
+        const chatOptions = document.getElementById('chat-options');
+
+        roomTypeSelector.addEventListener('click', (e) => {
+            const target = e.target.closest('.room-type-btn');
+            if (target) {
+                const selectedType = target.dataset.type;
+                roomTypeInput.value = selectedType;
+                const imageUrlInput = document.getElementById('room-image-url-input');
+
+                // ボタンのスタイル更新
+                roomTypeSelector.querySelectorAll('.room-type-btn').forEach(btn => {
+                    btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-md');
+                });
+                target.classList.add('bg-indigo-600', 'text-white', 'shadow-md');
+
+                // UIの表示切り替え
+                // First, reset all conditional inputs
+                fileUploadInput.classList.add('hidden');
+                fileUploadInput.required = false;
+                imageUrlInput.classList.add('hidden');
+                imageUrlInput.required = false;
+
+                if (selectedType === 'image') {
+                    fileUploadSection.classList.remove('hidden');
+                    chatOptions.classList.add('hidden');
+                    fileUploadLabel.innerText = 'ルームに表示する画像URL';
+                    fileUploadInfo.innerText = '外部サービスにアップロードした画像のURLを貼り付けてください。';
+                    imageUrlInput.classList.remove('hidden'); // Show URL input
+                    imageUrlInput.required = true;
+                } else if (selectedType === 'survey') {
+                    fileUploadSection.classList.remove('hidden');
+                    chatOptions.classList.add('hidden');
+                    fileUploadLabel.innerText = 'アンケート定義ファイル';
+                    fileUploadInfo.innerText = 'アンケートの質問が含まれるCSVファイルを選択してください。';
+                    fileUploadInput.classList.remove('hidden');
+                    fileUploadInput.accept = '.csv';
+                    fileUploadInput.required = true;
+                } else { // chat
+                    fileUploadSection.classList.add('hidden');
+                    chatOptions.classList.remove('hidden');
+                }
+            }
+        });
+
+        // モーダルが開くときの初期化
+        window.openCreateRoomModal = () => {
+            // デフォルト（チャット）の状態にリセット
+            const chatButton = roomTypeSelector.querySelector('.room-type-btn[data-type="chat"]');
+            if (chatButton) chatButton.click();
+
+            document.getElementById('new-room-name').value = '';
+            fileUploadInput.value = ''; // ファイル選択をリセット
+            document.getElementById('new-room-public').checked = true;
+            document.getElementById('new-room-comment').checked = true;
+
+            document.getElementById('create-room-modal').showModal();
+        };
+
+        window.startEdit = (id, bubbleId, isMsgAdmin) => {
+            const room = allRoomsData[currentRoomId];
+            const isRestricted = room && room.canComment === false;
+            if (isMsgAdmin && !isAdmin) { showToast("管理者のコメントは編集できません", "error"); return; }
+            if (isRestricted && !isAdmin) { showToast("現在、編集は制限されています", "error"); return; }
+
+            const bubble = document.getElementById(bubbleId);
+            if (!bubble) return;
+            let currentText = bubble.innerText;
+            const quoteDiv = bubble.querySelector('.reply-quote');
+            if (quoteDiv) {
+                currentText = "";
+                bubble.childNodes.forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE) currentText += node.textContent;
+                });
+            }
+
+            bubble.dataset.originalHtml = bubble.innerHTML;
+
+            const rect = bubble.getBoundingClientRect();
+            const minWidth = window.innerWidth < 768 ? window.innerWidth * 0.8 : 300;
+            const finalWidth = Math.max(rect.width, minWidth);
+            bubble.classList.remove('w-fit');
+
+            bubble.innerHTML = `
+                <div class="flex flex-col gap-2" style="width: ${finalWidth}px; max-width: 75vw;">
+                    <textarea id="edit-input-${id}" class="w-full text-gray-800 bg-white border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-sm"></textarea>
+                    <div class="flex justify-end gap-2 text-xs">
+                        <button id="cancel-btn-${id}" class="text-gray-500 hover:text-gray-700 px-2 py-1 font-medium">キャンセル</button>
+                        <button onclick="saveEdit('${id}')" class="bg-blue-600 text-white px-3 py-1 rounded-full font-bold shadow-sm hover:bg-blue-700">保存</button>
+                    </div>
+                </div>`;
+
+            const input = document.getElementById(`edit-input-${id}`);
+            input.value = currentText.trim();
+            const adjustHeight = () => { input.style.height = 'auto'; input.style.height = (input.scrollHeight) + 'px'; };
+            input.addEventListener('input', adjustHeight);
+            document.getElementById(`cancel-btn-${id}`).onclick = () => cancelEdit(id);
+            setTimeout(() => { input.focus(); adjustHeight(); }, 100);
+        };
+
+        window.saveEdit = async (id) => {
+            const input = document.getElementById(`edit-input-${id}`);
+            const val = input.value.trim();
+            if (!val) return;
+
+            const bubble = document.getElementById(`bubble-${id}`);
+            const originalHtml = bubble.dataset.originalHtml;
+
+            try {
+                const updateData = { text: val };
+                if (!isAdmin) {
+                    updateData.clientId = myClientId;
+                }
+
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = originalHtml;
+                const quoteDiv = tempDiv.querySelector('.reply-quote');
+
+                bubble.innerHTML = '';
+                if (quoteDiv) {
+                    bubble.appendChild(quoteDiv);
+                }
+                bubble.appendChild(createContentWithLinks(val));
+
+                bubble.classList.add('w-fit');
+                bubble.removeAttribute('style');
+
+                await updateDoc(doc(db, "messages", id), updateData);
+                showToast("メッセージを保存しました", "success");
+            } catch (e) {
+                console.error(e);
+                showToast("保存に失敗しました", "error");
+                if (originalHtml) {
+                    bubble.innerHTML = originalHtml;
+                    bubble.classList.add('w-fit');
+                    bubble.removeAttribute('style');
+                }
+            }
+        };
+
+        window.cancelEdit = (id) => {
+            const bubble = document.getElementById(`bubble-${id}`);
+            if (bubble && bubble.dataset.originalHtml) {
+                bubble.innerHTML = bubble.dataset.originalHtml;
+                bubble.classList.add('w-fit');
+                bubble.removeAttribute('style');
+            }
+        };
+
+        // 修正: テキストエリアの高さ自動調整ロジック（チラつき防止）
+        ui.messageInput.addEventListener('input', function () {
+            if (this.scrollHeight > this.clientHeight) {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            } else if (!this.value) {
+                this.style.height = 'auto';
+            }
+        });
+        ui.messageInput.addEventListener('keydown', function (e) {
+            if (e.isComposing) return;
+            if (ui.sendOnEnterCheckbox.checked && !ui.messageInput.disabled) {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+            }
+        });
+
+        document.querySelectorAll('dialog').forEach(dialog => {
+            dialog.addEventListener('click', (e) => {
+                if (e.target === dialog) {
+                    dialog.close();
+                }
+            });
+        });
+    </script>
+</body>
+
+</html> dialog.addEventListener('click', (e) => {
+if (e.target === dialog) {
+dialog.close();
+}
+});
+});
+</script>
+</body>
+
+</html>
