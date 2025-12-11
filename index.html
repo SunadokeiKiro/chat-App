@@ -1435,6 +1435,26 @@
                 legend.innerHTML = `質問 ${index + 1}: ${escapeHtml(q.text)} ${q.required ? '<span class="text-red-500 text-xs ml-2 font-medium">必須</span>' : ''}`;
                 questionBlock.appendChild(legend);
 
+                // Ver8.3.0: Label Filtering
+                const myLabel = mySelectedLabel || "";
+                const targetLabel = q.targetLabel || "-";
+
+                // If target is specific (not "-") AND doesn't match my label -> Hide
+                if (targetLabel !== "-" && targetLabel !== myLabel) {
+                    questionBlock.classList.add('hidden');
+                    // Mark inputs as not required so validation passes
+                    // Note: We'll also handle this in onsubmit, but removing required attribute is safer for browser validation
+                    q.required = false;
+                    // Actually modifying 'q' here might persist if we re-render? 
+                    // 'q' is from roomData which is cached in memory.
+                    // Better to just hide and handle validation in onsubmit correctly.
+                    // BUT browser built-in validation (required attribute) will block submission if hidden inputs are required.
+                    // So we MUST remove required attribute from the DOM elements created below.
+                }
+
+                // Temporary flag for DOM creation
+                const isVisible = (targetLabel === "-" || targetLabel === myLabel);
+
                 const inputContainer = document.createElement('div');
                 inputContainer.className = 'mt-4 space-y-3';
 
@@ -1447,7 +1467,7 @@
                             input.type = 'text';
                             input.name = q.id;
                             input.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base py-2.5 px-3';
-                            input.required = q.required;
+                            input.required = q.required && isVisible;
                             inputContainer.appendChild(input);
                             break;
                         }
@@ -1456,7 +1476,7 @@
                             textarea.name = q.id;
                             textarea.rows = 4;
                             textarea.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base px-3 py-2';
-                            textarea.required = q.required;
+                            textarea.required = q.required && isVisible;
                             inputContainer.appendChild(textarea);
                             break;
                         }
@@ -1469,7 +1489,7 @@
                                 radio.type = 'radio';
                                 radio.name = q.id;
                                 radio.value = opt;
-                                radio.required = q.required;
+                                radio.required = q.required && isVisible;
                                 radio.className = 'h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300';
                                 const span = document.createElement('span');
                                 span.textContent = opt;
@@ -1504,7 +1524,7 @@
                             const hiddenInput = document.createElement('input');
                             hiddenInput.type = 'hidden';
                             hiddenInput.name = q.id;
-                            hiddenInput.required = q.required;
+                            hiddenInput.required = q.required && isVisible;
                             inputContainer.appendChild(hiddenInput);
 
                             for (let i = 1; i <= 5; i++) {
@@ -2304,20 +2324,44 @@
 
                         // CSVから質問形式に変換
                         const questions = json.map((row, index) => {
-                            if (!row || row.length < 3 || !row[0] || !row[1] || !row[2]) {
-                                return null; // Skip invalid rows
+                            if (!row || row.length < 3) return null;
+
+                            // Migration Logic: Check if Column 2 is R/NR (Old Format)
+                            const col2 = (row[1] || "").toString().toUpperCase();
+                            const isOldFormat = (col2 === 'R' || col2 === 'NR');
+
+                            let type, targetLabel, requiredStr, text, options;
+
+                            if (isOldFormat) {
+                                // Old: type, required, text, options...
+                                type = row[0];
+                                targetLabel = "-";
+                                requiredStr = row[1];
+                                text = row[2];
+                                options = row.slice(3).filter(opt => opt);
+                            } else {
+                                // New: type, targetLabel, required, text, options...
+                                // Handle case where row might be too short for new format if malformed
+                                if (row.length < 4) return null;
+                                type = row[0];
+                                targetLabel = row[1];
+                                requiredStr = row[2];
+                                text = row[3];
+                                options = row.slice(4).filter(opt => opt);
                             }
+
                             return {
                                 id: `q${index}`,
-                                type: row[0],
-                                required: row[1].toUpperCase() === 'R',
-                                text: row[2],
-                                options: row.slice(3).filter(opt => opt) // Options start from the 4th column
+                                type: type,
+                                targetLabel: targetLabel,
+                                required: (requiredStr || "").toString().toUpperCase() === 'R',
+                                text: text,
+                                options: options
                             };
                         }).filter(q => q); // Filter out null rows
 
                         if (questions.length === 0) {
-                            reject(new Error("CSVのフォーマットが正しくないか、内容が空です。1列目に質問タイプ, 2列目に必須(R/NR), 3列目に質問文を配置してください。"));
+                            reject(new Error("CSVの内容が正しくありません。Ver8.3以降の形式(Type, Label, Req, Text...)を確認してください。"));
                         } else {
                             resolve(questions);
                         }
