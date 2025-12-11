@@ -352,7 +352,7 @@
             </button>
         </header>
 
-        <main id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar bg-gray-50">
+        <main id="chat-container" class="flex-1 w-full overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-gray-50">
             <div id="loading-spinner" class="spinner hidden"></div>
             <div id="empty-msg" class="text-center text-gray-400 mt-10 text-sm">左のメニューからルームを選択してください</div>
         </main>
@@ -1623,7 +1623,7 @@
 
                 // Tab buttons
                 const tabContainer = document.createElement('div');
-                tabContainer.className = 'border-b border-gray-200 mb-6 flex justify-between items-center';
+                tabContainer.className = 'border-b border-gray-200 mb-6 flex flex-wrap justify-between items-center gap-y-4 gap-x-2';
                 tabContainer.innerHTML = `
                     <nav class="-mb-px flex space-x-8" aria-label="Tabs">
                         <button id="tab-btn-summary" class="border-indigo-500 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">集計結果</button>
@@ -1715,6 +1715,9 @@
             const tableContainer = document.createElement('div');
             tableContainer.className = 'overflow-x-auto bg-white rounded-lg shadow';
 
+            const innerWrapper = document.createElement('div');
+            innerWrapper.className = 'inline-block min-w-full align-middle';
+
             const table = document.createElement('table');
             table.className = 'min-w-full divide-y divide-gray-200';
 
@@ -1778,7 +1781,8 @@
             });
             table.appendChild(tbody);
 
-            tableContainer.appendChild(table);
+            innerWrapper.appendChild(table);
+            tableContainer.appendChild(innerWrapper);
             container.appendChild(tableContainer);
         }
 
@@ -2326,9 +2330,14 @@
                         const questions = json.map((row, index) => {
                             if (!row || row.length < 3) return null;
 
-                            // Migration Logic: Check if Column 2 is R/NR (Old Format)
-                            const col2 = (row[1] || "").toString().toUpperCase();
-                            const isOldFormat = (col2 === 'R' || col2 === 'NR');
+                            // Migration Logic: Check if Column 3 is R/NR (New Format) or Column 2 is R/NR (Old Format)
+                            const col1Str = (row[1] || "").toString().trim().toUpperCase(); // Label or Req
+                            const col2Str = (row[2] || "").toString().trim().toUpperCase(); // Req or Text
+
+                            // If col2 is R/NR, it's likely New Format (Type, Label, Req, Text...)
+                            // If col2 is NOT R/NR, but col1 IS R/NR, it's likely Old Format (Type, Req, Text...)
+                            const isNewFormat = (col2Str === 'R' || col2Str === 'NR');
+                            const isOldFormat = !isNewFormat && (col1Str === 'R' || col1Str === 'NR');
 
                             let type, targetLabel, requiredStr, text, options;
 
