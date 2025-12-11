@@ -1308,6 +1308,7 @@
 
             if (roomData.type === 'image') {
                 chatFooter.classList.add('hidden');
+                ui.chatContainer.scrollTop = 0;
                 chatFooter.classList.add('hidden');
 
                 let imagesHtml = '';
@@ -1335,9 +1336,11 @@
                 `;
             } else if (roomData.type === 'survey') {
                 chatFooter.classList.add('hidden');
+                ui.chatContainer.scrollTop = 0;
                 renderSurvey(roomData);
             } else if (roomData.type === 'survey_result') {
                 chatFooter.classList.add('hidden');
+                ui.chatContainer.scrollTop = 0;
                 renderSurveyResults(roomData);
             } else { // 'chat' or undefined
                 chatFooter.classList.remove('hidden');
