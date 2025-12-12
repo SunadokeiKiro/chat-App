@@ -1356,6 +1356,10 @@
 
             const form = document.createElement('form');
             form.className = 'p-8 space-y-8 max-w-2xl mx-auto bg-white rounded-lg shadow';
+            
+            // --- Persistence Logic Key ---
+            const storageKey = `survey_draft_${roomData.id}`;
+
             form.onsubmit = async (e) => {
                 e.preventDefault();
                 const formData = new FormData(form);
@@ -1412,6 +1416,10 @@
                             createdAt: serverTimestamp()
                         };
                         await addDoc(collection(db, "survey_responses"), responseData);
+                        
+                        // --- Persistence: Clear on success ---
+                        localStorage.removeItem(storageKey);
+                        
                         showToast("回答を送信しました！", "success");
                         container.innerHTML = `
                             <div class="text-center p-10">
@@ -1425,6 +1433,35 @@
                     }
                 });
             };
+
+            // --- Persistence: Save on Input ---
+            form.addEventListener('input', () => {
+                const draft = {};
+                const formData = new FormData(form);
+                
+                // We can't just serialize FormData directly easily for restoring, 
+                // but we can iterate questions to build a structured draft.
+                roomData.questions.forEach(q => {
+                    if (q.type === 'multi_selection') {
+                        draft[q.id] = formData.getAll(q.id);
+                    } else {
+                        draft[q.id] = formData.get(q.id);
+                    }
+                });
+                localStorage.setItem(storageKey, JSON.stringify(draft));
+            });
+
+            // --- Persistence: Load Draft Data (if any) ---
+            let draftData = {};
+            try {
+                const saved = localStorage.getItem(storageKey);
+                if (saved) {
+                    draftData = JSON.parse(saved);
+                }
+            } catch (e) {
+                console.error("Failed to load draft", e);
+            }
+
 
             roomData.questions.forEach((q, index) => {
                 const questionBlock = document.createElement('fieldset');
@@ -1458,6 +1495,9 @@
                 const inputContainer = document.createElement('div');
                 inputContainer.className = 'mt-4 space-y-3';
 
+                // --- Persistence: Get saved value for this question ---
+                const savedValue = draftData[q.id];
+
                 if ((q.type === 'selection' || q.type === 'multi_selection') && q.options.length === 0) {
                     inputContainer.innerHTML = `<p class="text-sm text-gray-500">この質問には選択肢が設定されていません。</p>`;
                 } else {
@@ -1468,6 +1508,7 @@
                             input.name = q.id;
                             input.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base py-2.5 px-3';
                             input.required = q.required && isVisible;
+                            if (savedValue) input.value = savedValue; // Restore
                             inputContainer.appendChild(input);
                             break;
                         }
@@ -1477,6 +1518,7 @@
                             textarea.rows = 4;
                             textarea.className = 'w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base px-3 py-2';
                             textarea.required = q.required && isVisible;
+                            if (savedValue) textarea.value = savedValue; // Restore
                             inputContainer.appendChild(textarea);
                             break;
                         }
@@ -1491,6 +1533,7 @@
                                 radio.value = opt;
                                 radio.required = q.required && isVisible;
                                 radio.className = 'h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300';
+                                if (savedValue === opt) radio.checked = true; // Restore
                                 const span = document.createElement('span');
                                 span.textContent = opt;
                                 span.className = 'text-gray-700';
@@ -1509,6 +1552,10 @@
                                 checkbox.name = q.id;
                                 checkbox.value = opt;
                                 checkbox.className = 'h-4 w-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300';
+                                // Restore (savedValue should be an array)
+                                if (Array.isArray(savedValue) && savedValue.includes(opt)) {
+                                    checkbox.checked = true;
+                                }
                                 const span = document.createElement('span');
                                 span.textContent = opt;
                                 span.className = 'text-gray-700';
@@ -1525,7 +1572,16 @@
                             hiddenInput.type = 'hidden';
                             hiddenInput.name = q.id;
                             hiddenInput.required = q.required && isVisible;
+                            if (savedValue) hiddenInput.value = savedValue; // Restore
                             inputContainer.appendChild(hiddenInput);
+
+                            // Helper for coloring stars based on value (restored or hovered)
+                            const updateStars = (val) => {
+                                const stars = starContainer.querySelectorAll('span');
+                                stars.forEach(s => {
+                                    s.style.color = s.dataset.value <= val ? '#f59e0b' : '#d1d5db';
+                                });
+                            };
 
                             for (let i = 1; i <= 5; i++) {
                                 const star = document.createElement('span');
@@ -1534,23 +1590,19 @@
                                 star.dataset.value = i;
                                 starContainer.appendChild(star);
                             }
+                            
+                            // Initialize stars color if value restored
+                            if (savedValue) setTimeout(() => updateStars(savedValue), 0);
 
                             starContainer.addEventListener('mouseover', e => {
                                 if (e.target.tagName === 'SPAN' && e.target.dataset.value) {
-                                    const hoverValue = e.target.dataset.value;
-                                    const allStars = starContainer.querySelectorAll('span');
-                                    allStars.forEach(s => {
-                                        s.style.color = s.dataset.value <= hoverValue ? '#f59e0b' : '#d1d5db';
-                                    });
+                                    updateStars(e.target.dataset.value);
                                 }
                             });
 
                             starContainer.addEventListener('mouseout', () => {
                                 const currentValue = hiddenInput.value || 0;
-                                const allStars = starContainer.querySelectorAll('span');
-                                allStars.forEach(s => {
-                                    s.style.color = s.dataset.value <= currentValue ? '#f59e0b' : '#d1d5db';
-                                });
+                                updateStars(currentValue);
                             });
 
                             starContainer.addEventListener('click', e => {
@@ -1563,11 +1615,9 @@
                                         hiddenInput.value = value;
                                     }
                                     const newCurrentValue = hiddenInput.value || 0;
-                                    const allStars = starContainer.querySelectorAll('span');
-                                    allStars.forEach(s => {
-                                        s.style.color = s.dataset.value <= newCurrentValue ? '#f59e0b' : '#d1d5db';
-                                    });
-                                    // Trigger validation
+                                    updateStars(newCurrentValue);
+                                    
+                                    // Trigger validation & Persistence Save
                                     hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
                                 }
                             });
