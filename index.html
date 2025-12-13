@@ -255,6 +255,68 @@
             transition: all 0.2s;
             cursor: pointer;
         }
+
+        /* Image Viewer Styles */
+        #image-viewer-modal {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 60;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #image-viewer-modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #viewer-container {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+        }
+
+        #viewer-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transform-origin: center center;
+            transition: transform 0.1s linear;
+            /* Smoothness for wheel, but overridden for drag */
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        #viewer-close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 2rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 70;
+            transition: background 0.2s;
+        }
+
+        #viewer-close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 
@@ -552,6 +614,13 @@
         </div>
     </dialog>
 
+    <div id="image-viewer-modal">
+        <button id="viewer-close-btn" onclick="closeImageViewer()">×</button>
+        <div id="viewer-container">
+            <img id="viewer-image" src="" alt="Expanded Image">
+        </div>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
@@ -568,7 +637,7 @@
             measurementId: "G-JWSTMBH5HB"
         };
 
-        console.log("App Version: 8.0.1 - Rule Compliance Fix");
+        console.log("App Version: 8.4.0 - Image Viewer Upgrade");
 
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -717,7 +786,12 @@
             scrollBottomBtn: document.getElementById('scroll-bottom-btn'),
             unreadBadge: document.getElementById('unread-badge'),
             returnBtn: document.getElementById('return-btn'),
-            loadingSpinner: document.getElementById('loading-spinner')
+            unreadBadge: document.getElementById('unread-badge'),
+            returnBtn: document.getElementById('return-btn'),
+            loadingSpinner: document.getElementById('loading-spinner'),
+            imageViewerModal: document.getElementById('image-viewer-modal'),
+            viewerImage: document.getElementById('viewer-image'),
+            viewerContainer: document.getElementById('viewer-container')
         };
 
         const savedSetting = localStorage.getItem('sendOnEnter');
@@ -1317,13 +1391,17 @@
                 if (images.length === 0) {
                     imagesHtml = '<div class="text-gray-500">画像が設定されていません</div>';
                 } else if (images.length === 1) {
-                    imagesHtml = `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(roomData.name)}" class="max-w-full max-h-full object-contain rounded-lg shadow-lg">`;
+                    imagesHtml = `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(roomData.name)}" 
+                        class="max-w-full max-h-full object-contain rounded-lg shadow-lg cursor-pointer hover:opacity-95 transition-opacity"
+                        onclick="openImageViewer('${escapeHtml(images[0])}')">`;
                 } else {
                     // Optimized for maximum size: simple grid, no card styling, natural height
                     imagesHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 w-full h-full overflow-y-auto content-start">
                         ${images.map(url => `
                             <div class="flex items-center justify-center bg-black/20">
-                                <img src="${escapeHtml(url)}" class="w-full h-auto object-contain max-h-screen">
+                                <img src="${escapeHtml(url)}" 
+                                    class="w-full h-auto object-contain max-h-screen cursor-pointer hover:opacity-95 transition-opacity"
+                                    onclick="openImageViewer('${escapeHtml(url)}')">
                             </div>
                         `).join('')}
                     </div>`;
@@ -1356,7 +1434,7 @@
 
             const form = document.createElement('form');
             form.className = 'p-8 space-y-8 max-w-2xl mx-auto bg-white rounded-lg shadow';
-            
+
             // --- Persistence Logic Key ---
             const storageKey = `survey_draft_${roomData.id}`;
 
@@ -1416,10 +1494,10 @@
                             createdAt: serverTimestamp()
                         };
                         await addDoc(collection(db, "survey_responses"), responseData);
-                        
+
                         // --- Persistence: Clear on success ---
                         localStorage.removeItem(storageKey);
-                        
+
                         showToast("回答を送信しました！", "success");
                         container.innerHTML = `
                             <div class="text-center p-10">
@@ -1438,7 +1516,7 @@
             form.addEventListener('input', () => {
                 const draft = {};
                 const formData = new FormData(form);
-                
+
                 // We can't just serialize FormData directly easily for restoring, 
                 // but we can iterate questions to build a structured draft.
                 roomData.questions.forEach(q => {
@@ -1590,7 +1668,7 @@
                                 star.dataset.value = i;
                                 starContainer.appendChild(star);
                             }
-                            
+
                             // Initialize stars color if value restored
                             if (savedValue) setTimeout(() => updateStars(savedValue), 0);
 
@@ -1600,28 +1678,23 @@
                                 }
                             });
 
-                            starContainer.addEventListener('mouseout', () => {
-                                const currentValue = hiddenInput.value || 0;
-                                updateStars(currentValue);
+                            // Mouse leave -> revert to saved state or 0
+                            starContainer.addEventListener('mouseleave', () => {
+                                updateStars(hiddenInput.value || 0);
                             });
 
+                            // Click -> save value (and persist)
                             starContainer.addEventListener('click', e => {
                                 if (e.target.tagName === 'SPAN' && e.target.dataset.value) {
-                                    const value = e.target.dataset.value;
-                                    const currentValue = hiddenInput.value;
-                                    if (currentValue === value) {
-                                        hiddenInput.value = '';
-                                    } else {
-                                        hiddenInput.value = value;
-                                    }
-                                    const newCurrentValue = hiddenInput.value || 0;
-                                    updateStars(newCurrentValue);
-                                    
-                                    // Trigger validation & Persistence Save
-                                    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    const val = e.target.dataset.value;
+                                    hiddenInput.value = val;
+                                    updateStars(val);
+
+                                    // Manually trigger input event for persistence
+                                    form.dispatchEvent(new Event('input'));
                                 }
                             });
-                            inputContainer.appendChild(starContainer);
+
                             break;
                         }
                         default:
@@ -1633,14 +1706,237 @@
                 form.appendChild(questionBlock);
             });
 
-            const submitButton = document.createElement('button');
-            submitButton.type = 'submit';
-            submitButton.className = 'w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition';
-            submitButton.textContent = 'この内容で提出する';
-            form.appendChild(submitButton);
+            // Submit Button
+            const submitBtn = document.createElement('button');
+            submitBtn.type = 'submit';
+            submitBtn.className = 'w-full bg-indigo-600 text-white font-bold py-3 rounded-lg shadow hover:bg-indigo-700 transition transform active:scale-95 text-lg mt-8';
+            submitBtn.innerText = "回答を送信する";
+            form.appendChild(submitBtn);
 
             container.appendChild(form);
         }
+
+        // --- Image Viewer Logic ---
+        let viewerState = {
+            scale: 1,
+            translateX: 0,
+            translateY: 0,
+            isDragging: false,
+            startX: 0,
+            startY: 0,
+            lastTranslateX: 0,
+            lastTranslateY: 0,
+            initialDistance: 0,
+            hasMoved: false,
+            lastMidX: null,
+            lastMidY: null
+        };
+
+        window.openImageViewer = (url) => {
+            ui.viewerImage.src = url;
+            ui.imageViewerModal.classList.add('active');
+            resetViewerState();
+            ui.viewerImage.style.transform = `translate(0px, 0px) scale(1)`;
+        };
+
+        window.closeImageViewer = () => {
+            ui.imageViewerModal.classList.remove('active');
+            setTimeout(() => {
+                ui.viewerImage.src = "";
+            }, 300);
+        };
+
+        function resetViewerState() {
+            viewerState = {
+                scale: 1,
+                translateX: 0,
+                translateY: 0,
+                isDragging: false,
+                startX: 0,
+                startY: 0,
+                lastTranslateX: 0,
+                lastTranslateY: 0,
+                lastTranslateY: 0,
+                initialDistance: 0,
+                initialDistance: 0,
+                hasMoved: false,
+                lastMidX: null,
+                lastMidY: null
+            };
+        }
+
+        function updateImageTransform() {
+            ui.viewerImage.style.transform = `translate(${viewerState.translateX}px, ${viewerState.translateY}px) scale(${viewerState.scale})`;
+        }
+
+        // Pointer Events for Drag & Zoom
+        const container = document.getElementById('viewer-container');
+        const evCache = [];
+        let prevDiff = -1;
+
+        container.onpointerdown = (ev) => {
+            evCache.push(ev);
+            viewerState.isDragging = true;
+            viewerState.hasMoved = false;
+            viewerState.startX = ev.clientX;
+            viewerState.startY = ev.clientY;
+
+            // Remove transition during drag/zoom for performance
+            ui.viewerImage.style.transition = 'none';
+        };
+
+        container.onpointermove = (ev) => {
+            // Find this event in the cache and update its record
+            const index = evCache.findIndex((cachedEv) => cachedEv.pointerId === ev.pointerId);
+            if (index > -1) {
+                evCache[index] = ev;
+            }
+
+            if (evCache.length === 2) {
+                // Pinch Zoom
+                const curDiff = Math.sqrt(Math.pow(evCache[1].clientX - evCache[0].clientX, 2) + Math.pow(evCache[1].clientY - evCache[0].clientY, 2));
+
+                if (prevDiff > 0) { // prevDiff tracks distance
+
+                    // Calculate current center of the two pointers
+                    const curP1 = evCache[0];
+                    const curP2 = evCache[1];
+                    const midX = (curP1.clientX + curP2.clientX) / 2;
+                    const midY = (curP1.clientY + curP2.clientY) / 2;
+
+                    // Ideally we need previous midpoint to calculate pan delta from pinch movement
+                    // Since we don't store prevCenter explicitly, we can approximate or store it.
+                    // However, evCache is updated *in place* before this block.
+                    // To do this correctly without extra state, we need to know where the updated pointer WAS.
+                    // But we only have the new position `ev`.
+
+                    // BETTER APPROACH:
+                    // The "Zoom center" logic (like wheel) handles the "Expansion" part.
+                    // The "Pan" part is handled by the movement of the center.
+
+                    // Let's implement full "Transform around pivot" logic?
+                    // No, let's stick to the Wheel logic for Zoom, adapted for 2 pointers.
+
+                    // 1. Calculate Scale Change
+                    const deltaDist = curDiff - prevDiff;
+                    const newScale = Math.max(0.5, Math.min(viewerState.scale + deltaDist * 0.01, 5));
+                    const scaleRatio = newScale / viewerState.scale;
+
+                    // 2. Identify Pivot Point (Screen Coordinates relative to Image Center)
+                    const rect = container.getBoundingClientRect();
+                    const offsetX = midX - rect.left - rect.width / 2;
+                    const offsetY = midY - rect.top - rect.height / 2;
+
+                    // 3. Apply Zoom Correction (keep pivot point stable)
+                    // formula: tx_new = pivot - ratio * (pivot - tx_old)
+                    let newTx = offsetX - scaleRatio * (offsetX - viewerState.translateX);
+                    let newTy = offsetY - scaleRatio * (offsetY - viewerState.translateY);
+
+                    // 4. Simultaneous Pan (Removed as per user feedback)
+                    // We keep the "pivot" logic above which handles the "Zoom into this point" effect.
+                    // But we do not add the extra deltaPan from finger movement.
+
+                    viewerState.translateX = newTx;
+                    viewerState.translateY = newTy;
+                    viewerState.scale = newScale;
+
+                    viewerState.lastMidX = midX;
+                    viewerState.lastMidY = midY;
+                } else {
+                    // First frame of 2-finger touch
+                    const curP1 = evCache[0];
+                    const curP2 = evCache[1];
+                    viewerState.lastMidX = (curP1.clientX + curP2.clientX) / 2;
+                    viewerState.lastMidY = (curP1.clientY + curP2.clientY) / 2;
+                }
+                prevDiff = curDiff;
+                updateImageTransform();
+            } else if (evCache.length === 1 && viewerState.isDragging) {
+                // Pan
+                const deltaX = ev.clientX - viewerState.startX;
+                const deltaY = ev.clientY - viewerState.startY;
+
+                if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+                    viewerState.hasMoved = true;
+                }
+
+                viewerState.translateX = viewerState.lastTranslateX + deltaX;
+                viewerState.translateY = viewerState.lastTranslateY + deltaY;
+
+                updateImageTransform();
+            }
+        };
+
+        container.onpointerup = (ev) => {
+            removeEvent(ev);
+            if (evCache.length < 2) {
+                prevDiff = -1;
+                viewerState.lastMidX = null;
+                viewerState.lastMidY = null;
+            }
+            if (evCache.length === 0) {
+                viewerState.isDragging = false;
+                viewerState.lastTranslateX = viewerState.translateX;
+                viewerState.lastTranslateY = viewerState.translateY;
+                // Restore transition
+                ui.viewerImage.style.transition = 'transform 0.1s linear';
+            }
+        };
+
+        container.onpointercancel = (ev) => {
+            removeEvent(ev);
+            if (evCache.length < 2) {
+                prevDiff = -1;
+                viewerState.lastMidX = null;
+                viewerState.lastMidY = null;
+            }
+            if (evCache.length === 0) {
+                viewerState.isDragging = false;
+                viewerState.lastTranslateX = viewerState.translateX;
+                viewerState.lastTranslateY = viewerState.translateY;
+            }
+        };
+
+        function removeEvent(ev) {
+            const index = evCache.findIndex((cachedEv) => cachedEv.pointerId === ev.pointerId);
+            if (index > -1) {
+                evCache.splice(index, 1);
+            }
+        }
+
+        container.onclick = (e) => {
+            if (!viewerState.hasMoved && e.target === container) {
+                closeImageViewer();
+            }
+        };
+
+        // Wheel Zoom
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+
+            const rect = container.getBoundingClientRect();
+            // Mouse position relative to the container center
+            // (Since transform-origin is center, (0,0) in transform space corresponds to container center)
+            const offsetX = e.clientX - rect.left - rect.width / 2;
+            const offsetY = e.clientY - rect.top - rect.height / 2;
+
+            const delta = -e.deltaY * 0.001;
+            const newScale = Math.max(0.5, Math.min(viewerState.scale + delta, 5));
+
+            // Calculate how much the "point under cursor" moves in the scaled space
+            // Logic: The point under cursor (offsetX, offsetY) is at (offsetX - tx) / scale in image coordinates
+            // We want that same point to be under cursor after new scale:
+            // (offsetX - tx') / scale' = (offsetX - tx) / scale
+            // tx' = offsetX - (scale' / scale) * (offsetX - tx)
+
+            const scaleRatio = newScale / viewerState.scale;
+            viewerState.translateX = offsetX - scaleRatio * (offsetX - viewerState.translateX);
+            viewerState.translateY = offsetY - scaleRatio * (offsetY - viewerState.translateY);
+
+            viewerState.scale = newScale;
+            updateImageTransform();
+        }, { passive: false });
+
 
         async function renderSurveyResults(roomData) {
             const container = ui.chatContainer;
